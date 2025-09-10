@@ -124,7 +124,6 @@ class Lexer {
             }
         }
 
-        // В конце текста проверить остаток лексемы
         if (token.isNotEmpty()) {
             if (errorMode) {
                 addToken(tokens, token.toString(), TokenType.ERROR, "Invalid token")

@@ -1,0 +1,7 @@
+﻿#test 8
+class Simple is
+  var x := Integer(1)
+  this() is
+    x := x.Plus(Integer(2))
+  end
+end

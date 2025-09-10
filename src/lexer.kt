@@ -1,4 +1,3 @@
-import java.io.File
 enum class State {
     START, NUM, IDEN
 }
@@ -31,6 +30,7 @@ class Lexer {
             val c = text[i]
 
             if (errorMode) {
+
                 if (isEmpty(c)) {
                     addToken(tokens, token.toString(), TokenType.ERROR, "Invalid token")
                     token.clear()
@@ -42,10 +42,11 @@ class Lexer {
                 }
                 continue
             }
-
-            if (c == '/' && i + 1 < text.length && text[i + 1] == '/') {
-                i += 2
-                while (i < text.length && text[i] != '\n') i++
+            if (c == '#') {
+                i ++
+                while (i < text.length && text[i] != '\n'){
+                    i++
+                }
                 continue
             }
 
@@ -145,17 +146,3 @@ class Lexer {
     }
 }
 
-fun main() {
-    val lexer = Lexer()
-    val text = "a_square := a.Mult(a) 7.7 xyz@123" +
-            "\n//уаыауапуцп" +
-            "\n mult"
-    val tokens = lexer.scan(text)
-    tokens.forEach { token ->
-        if (token.type == TokenType.ERROR) {
-            println("Error: '${token.text}' - ${token.errorMessage}")
-        } else {
-            println("${token.text} : ${token.type}")
-        }
-    }
-}

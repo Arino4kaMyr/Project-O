@@ -1,47 +1,81 @@
+import java.io.File
 enum class State {
     START, NUM, IDEN, SYM
 }
 
-val symbols = setOf(':',';', '.', ',', '(', ')', '[', ']', '{', '}','"', '=')
+enum class TokenType {
+    NUMBER, IDENTIFIER, SYMBOL, SPECIAL_SYMBOL, ERROR
+}
 
-class Lexer{
+data class Token(val text: String, val type: TokenType, val errorMessage: String? = null)
+
+class Lexer {
     var state = State.START
 
     fun isLetter(c: Char) = c.isLetter() || c == '_'
     fun isDigit(c: Char) = c.isDigit()
     fun isEmpty(c: Char) = c.isWhitespace() || c == '\n'
+    val symbols = setOf(':', ';', '.', ',', '(', ')', '[', ']', '{', '}', '"', '=')
 
-    fun scan(text: String): List<Pair<String, String>> {
+    private fun addToken(tokens: MutableList<Token>, text: String, type: TokenType, error: String? = null) {
+        tokens.add(Token(text, type, error))
+    }
+
+    fun scan(text: String): List<Token> {
         var i = 0
-        var token = StringBuilder()
-        val tokens = mutableListOf<Pair<String, String>>()
+        val token = StringBuilder()
+        val tokens = mutableListOf<Token>()
+        var errorMode = false
 
         while (i < text.length) {
             val c = text[i]
+
+            if (errorMode) {
+                if (isEmpty(c)) {
+                    addToken(tokens, token.toString(), TokenType.ERROR, "Invalid token")
+                    token.clear()
+                    errorMode = false
+                    i++
+                } else {
+                    token.append(c)
+                    i++
+                }
+                continue
+            }
+
             when (state) {
                 State.START -> {
-                    token = StringBuilder()
+                    token.clear()
                     when {
                         isLetter(c) -> {
                             token.append(c)
                             state = State.IDEN
-                            i++;
+                            i++
                         }
                         isDigit(c) -> {
                             token.append(c)
                             state = State.NUM
-                            i++;
+                            i++
                         }
                         c in symbols -> {
                             token.append(c)
-                            state = State.SYM
-                            i++
+                            if (c == ':' && i + 1 < text.length && text[i + 1] == '=') {
+                                token.append('=')
+                                addToken(tokens, token.toString(), TokenType.SPECIAL_SYMBOL)
+                                i += 2
+                                state = State.START
+                                token.clear()
+                            } else {
+                                addToken(tokens, token.toString(), TokenType.SYMBOL)
+                                i++
+                                state = State.START
+                                token.clear()
+                            }
                         }
-                        isEmpty(c) -> {
-                            i++
-                        }
+                        isEmpty(c) -> i++
                         else -> {
-                            tokens.add(Pair(c.toString(), "UNKNOWN SYMBOL"))
+                            token.append(c)
+                            errorMode = true
                             i++
                         }
                     }
@@ -50,25 +84,18 @@ class Lexer{
                     when {
                         isDigit(c) -> {
                             token.append(c)
-                            i++;
-                        }
-                        c in symbols -> {
-                            tokens.add(Pair(token.toString(), "NUMBER"))
-                            token = StringBuilder()
-                            token.append(c)
-
-                            state = State.SYM
                             i++
                         }
-                        isEmpty(c) -> {
+                        isLetter(c) -> {
+                            token.append(c)
+                            errorMode = true
                             state = State.START
-                            tokens.add(Pair(token.toString(), "NUMBER"))
                             i++
                         }
                         else -> {
+                            addToken(tokens, token.toString(), TokenType.NUMBER)
+                            token.clear()
                             state = State.START
-                            tokens.add(Pair(c.toString(), "WRONG CHARACTER"))
-                            i++
                         }
                     }
                 }
@@ -76,66 +103,54 @@ class Lexer{
                     when {
                         isLetter(c) || isDigit(c) -> {
                             token.append(c)
-                            i++;
-                        }
-                        c in symbols -> {
-                            tokens.add(Pair(token.toString(), "IDENTIFIER"))
-                            token = StringBuilder()
-                            token.append(c)
-
-                            state = State.SYM
                             i++
                         }
-                        isEmpty(c) -> {
+                        isEmpty(c) || c in symbols-> {
+                            addToken(tokens, token.toString(), TokenType.IDENTIFIER)
+                            token.clear()
                             state = State.START
-                            tokens.add(Pair(token.toString(), "IDENTIFIER"))
-                            i++
                         }
                         else -> {
+                            token.append(c)
+                            errorMode = true
                             state = State.START
-                            tokens.add(Pair(c.toString(), "WRONG CHARACTER"))
                             i++
                         }
                     }
                 }
-                State.SYM -> {
-                    when {
-                        c in symbols -> {
-                            if (token.append(c).toString() == ":="){
-                                tokens.add(Pair(token.toString(), "SPECIAL SYMBOL"))
-                                token = StringBuilder()
-
-                                state = State.SYM
-                                i++
-                            } else {
-                                tokens.add(Pair(c.toString(), "WRONG CHARACTER"))
-                                i++
-                            }
-                        }
-                        isEmpty(c) -> {
-                            state = State.START
-                            tokens.add(Pair(token.toString(), "IDENTIFIER"))
-                            i++
-                        }
-                        isLetter(c) || isDigit(c) -> {
-                            state = State.START
-                        }
-                        else -> {
-                            state = State.START
-                            tokens.add(Pair(c.toString(), "WRONG CHARACTER"))
-                            i++
-                        }
-                    }
+                else -> {
+                    state = State.START
                 }
             }
         }
+
+        // В конце текста проверить остаток лексемы
+        if (token.isNotEmpty()) {
+            if (errorMode) {
+                addToken(tokens, token.toString(), TokenType.ERROR, "Invalid token")
+            } else {
+                val finalType = when (state) {
+                    State.NUM -> TokenType.NUMBER
+                    State.IDEN -> TokenType.IDENTIFIER
+                    else -> TokenType.SYMBOL
+                }
+                addToken(tokens, token.toString(), finalType)
+            }
+        }
+
         return tokens
     }
 }
 
 fun main() {
     val lexer = Lexer()
-    val text = "a_square := a.Mult(a)"
+    val text = "a_square := a.Mult(a) 7h7 xyz@123"
     val tokens = lexer.scan(text)
-    tokens.forEach { println(it) }
+    tokens.forEach { token ->
+        if (token.type == TokenType.ERROR) {
+            println("Error: '${token.text}' - ${token.errorMessage}")
+        } else {
+            println("${token.text} : ${token.type}")
+        }
+    }
 }

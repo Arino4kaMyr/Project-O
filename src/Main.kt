@@ -1,6 +1,6 @@
 import java.io.File
 enum class State {
-    START, NUM, IDEN, SYM
+    START, NUM, IDEN
 }
 
 enum class TokenType {
@@ -43,6 +43,13 @@ class Lexer {
                 continue
             }
 
+            if (c == '/' && i + 1 < text.length && text[i + 1] == '/') {
+                i += 2
+                while (i < text.length && text[i] != '\n') i++
+                continue
+            }
+
+
             when (state) {
                 State.START -> {
                     token.clear()
@@ -82,20 +89,20 @@ class Lexer {
                 }
                 State.NUM -> {
                     when {
-                        isDigit(c) -> {
+                        isDigit(c) || c == '.' -> {
                             token.append(c)
                             i++
                         }
-                        isLetter(c) -> {
+                        isEmpty(c) || c in symbols-> {
+                            addToken(tokens, token.toString(), TokenType.NUMBER)
+                            token.clear()
+                            state = State.START
+                        }
+                        else -> {
                             token.append(c)
                             errorMode = true
                             state = State.START
                             i++
-                        }
-                        else -> {
-                            addToken(tokens, token.toString(), TokenType.NUMBER)
-                            token.clear()
-                            state = State.START
                         }
                     }
                 }
@@ -117,9 +124,6 @@ class Lexer {
                             i++
                         }
                     }
-                }
-                else -> {
-                    state = State.START
                 }
             }
         }
@@ -143,7 +147,9 @@ class Lexer {
 
 fun main() {
     val lexer = Lexer()
-    val text = "a_square := a.Mult(a) 7h7 xyz@123"
+    val text = "a_square := a.Mult(a) 7.7 xyz@123" +
+            "\n//уаыауапуцп" +
+            "\n mult"
     val tokens = lexer.scan(text)
     tokens.forEach { token ->
         if (token.type == TokenType.ERROR) {

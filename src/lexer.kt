@@ -3,8 +3,13 @@ enum class State {
 }
 
 enum class TokenType {
-    NUMBER, IDENTIFIER, SYMBOL, SPECIAL_SYMBOL, ERROR
+    NUMBER, IDENTIFIER, SPECIAL_SYMBOL, KEYWORD, ERROR
 }
+
+val keywords = setOf(
+    "class", "extends", "is", "end", "var", "method", "this",
+    "return", "while", "loop", "if", "then", "else", "true", "false"
+)
 
 data class Token(val text: String, val type: TokenType, val errorMessage: String? = null)
 
@@ -74,7 +79,7 @@ class Lexer {
                                 state = State.START
                                 token.clear()
                             } else {
-                                addToken(tokens, token.toString(), TokenType.SYMBOL)
+                                addToken(tokens, token.toString(), TokenType.SPECIAL_SYMBOL)
                                 i++
                                 state = State.START
                                 token.clear()
@@ -114,9 +119,15 @@ class Lexer {
                             i++
                         }
                         isEmpty(c) || c in symbols-> {
-                            addToken(tokens, token.toString(), TokenType.IDENTIFIER)
-                            token.clear()
-                            state = State.START
+                            if (token.toString() in keywords){
+                                addToken(tokens, token.toString(), TokenType.KEYWORD)
+                                token.clear()
+                                state = State.START
+                            } else {
+                                addToken(tokens, token.toString(), TokenType.IDENTIFIER)
+                                token.clear()
+                                state = State.START
+                            }
                         }
                         else -> {
                             token.append(c)
@@ -136,7 +147,7 @@ class Lexer {
                 val finalType = when (state) {
                     State.NUM -> TokenType.NUMBER
                     State.IDEN -> TokenType.IDENTIFIER
-                    else -> TokenType.SYMBOL
+                    else -> TokenType.SPECIAL_SYMBOL
                 }
                 addToken(tokens, token.toString(), finalType)
             }

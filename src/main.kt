@@ -2,10 +2,27 @@ import java.io.File
 
 fun main() {
     val lexer = Lexer()
-    val filePath = "/Users/arinazimina/IdeaProjects/Project-O/src/tests.txt" // путь к вашему файлу с исходным текстом
-    var text = File(filePath).readText()
-    if (text.startsWith("\uFEFF")) {
-        text = text.removePrefix("\uFEFF")
+    println("Choose input source: [1] File, [2] Console")
+    val choice = readLine()?.trim()
+
+    val text = when (choice) {
+        "1" -> {
+            var fileText = File("/Users/arinazimina/IdeaProjects/Project-O/src/tests.txt").readText()
+            if (fileText.startsWith("\uFEFF")) {
+                fileText = fileText.removePrefix("\uFEFF")
+            }
+            fileText
+        }
+        else -> {
+            println("Enter text (end with an empty line):")
+            val lines = mutableListOf<String>()
+            while (true) {
+                val line = readLine()
+                if (line == null || line.isEmpty()) break
+                lines.add(line)
+            }
+            lines.joinToString("\n")
+        }
     }
 
     val tokens = lexer.scan(text)

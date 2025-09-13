@@ -20,6 +20,7 @@ class Lexer {
     fun isDigit(c: Char) = c.isDigit()
     fun isEmpty(c: Char) = c.isWhitespace() || c == '\n'
     val symbols = setOf(':', ';', '.', ',', '(', ')', '[', ']', '{', '}', '"', '=')
+    val num_regex = Regex("^\\d+(\\.\\d+)?$")
 
     private fun addToken(tokens: MutableList<Token>, text: String, type: TokenType, error: String? = null) {
         tokens.add(Token(text, type, error))
@@ -100,9 +101,14 @@ class Lexer {
                             i++
                         }
                         isEmpty(c) || c in symbols-> {
-                            addToken(tokens, token.toString(), TokenType.NUMBER)
-                            token.clear()
-                            state = State.START
+                            if(num_regex.matches(token.toString())) {
+                                addToken(tokens, token.toString(), TokenType.NUMBER)
+                                token.clear()
+                                state = State.START
+                            } else {
+                                errorMode = true
+                                state = State.START
+                            }
                         }
                         else -> {
                             token.append(c)

@@ -1,0 +1,5 @@
+﻿#test 2
+var a : Integer(10)
+var b : Integer(15dd)
+
+var n := a.Plus(b)

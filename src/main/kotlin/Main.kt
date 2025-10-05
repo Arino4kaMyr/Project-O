@@ -7,7 +7,10 @@ fun main() {
 
     val text = when (choice) {
         "1" -> {
-            var fileText = File("src/tests.txt").readText()
+            val resourceStream = object{}.javaClass.getResourceAsStream("/tests.txt")
+                ?: error("Файл tests.txt не найден в resources")
+
+            var fileText = resourceStream.bufferedReader().use { it.readText() }
             if (fileText.startsWith("\uFEFF")) {
                 fileText = fileText.removePrefix("\uFEFF")
             }

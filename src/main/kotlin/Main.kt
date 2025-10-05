@@ -1,30 +1,35 @@
-import java.io.File
+import constants.MainConstants
+import kotlin.system.exitProcess
 
 fun main() {
     val lexer = Lexer()
     println("Choose input source: [1] File, [2] Console")
-    val choice = readLine()?.trim()
+    val choice = readlnOrNull()?.trim()
 
     val text = when (choice) {
         "1" -> {
-            val resourceStream = object{}.javaClass.getResourceAsStream("/tests.txt")
-                ?: error("Файл tests.txt не найден в resources")
+            val resourceStream = object{}.javaClass.getResourceAsStream(MainConstants.TEST_FILE)
+                ?: error("File tests.txt doesn't exist")
 
             var fileText = resourceStream.bufferedReader().use { it.readText() }
-            if (fileText.startsWith("\uFEFF")) {
-                fileText = fileText.removePrefix("\uFEFF")
+            if (fileText.startsWith(MainConstants.DECODE_BYTES)) {
+                fileText = fileText.removePrefix(MainConstants.DECODE_BYTES)
             }
             fileText
         }
-        else -> {
+        "2" -> {
             println("Enter text (end with an empty line):")
             val lines = mutableListOf<String>()
             while (true) {
-                val line = readLine()
+                val line = readlnOrNull()
                 if (line == null || line.isEmpty()) break
                 lines.add(line)
             }
             lines.joinToString("\n")
+        }
+        else -> {
+            println("Please, choose the correct one variant")
+            exitProcess(0)
         }
     }
 

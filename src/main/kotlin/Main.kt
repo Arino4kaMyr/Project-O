@@ -1,4 +1,6 @@
 import constants.MainConstants
+import lexer.Lexer
+import token.TokenType
 import kotlin.system.exitProcess
 
 fun main() {

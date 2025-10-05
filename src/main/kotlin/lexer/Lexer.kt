@@ -1,17 +1,7 @@
-enum class State {
-    START, NUM, IDEN
-}
+package lexer
 
-enum class TokenType {
-    NUMBER, IDENTIFIER, SPECIAL_SYMBOL, KEYWORD, ERROR
-}
-
-val keywords = setOf(
-    "class", "extends", "is", "end", "var", "method", "this",
-    "return", "while", "loop", "if", "then", "else", "true", "false"
-)
-
-data class Token(val text: String, val type: TokenType, val errorMessage: String? = null)
+import token.Token
+import token.TokenType
 
 class Lexer {
     var state = State.START
@@ -20,7 +10,7 @@ class Lexer {
     fun isDigit(c: Char) = c.isDigit()
     fun isEmpty(c: Char) = c.isWhitespace() || c == '\n'
     val symbols = setOf(':', ';', '.', ',', '(', ')', '[', ']', '{', '}', '"', '=')
-    val num_regex = Regex("^\\d+(\\.\\d+)?$")
+    val numRegex = Regex("^\\d+(\\.\\d+)?$")
 
     private fun addToken(tokens: MutableList<Token>, text: String, type: TokenType, error: String? = null) {
         tokens.add(Token(text, type, error))
@@ -101,7 +91,7 @@ class Lexer {
                             i++
                         }
                         isEmpty(c) || c in symbols-> {
-                            if(num_regex.matches(token.toString())) {
+                            if(numRegex.matches(token.toString())) {
                                 addToken(tokens, token.toString(), TokenType.NUMBER)
                                 token.clear()
                                 state = State.START
@@ -125,7 +115,7 @@ class Lexer {
                             i++
                         }
                         isEmpty(c) || c in symbols-> {
-                            if (token.toString() in keywords){
+                            if (token.toString() in KEYWORDS){
                                 addToken(tokens, token.toString(), TokenType.KEYWORD)
                                 token.clear()
                                 state = State.START
@@ -160,6 +150,13 @@ class Lexer {
         }
 
         return tokens
+    }
+    companion object {
+        private val KEYWORDS = setOf(
+            "class", "extends", "is", "end", "var", "method", "this",
+            "return", "while", "loop", "if", "then", "else", "true", "false"
+        )
+
     }
 }
 

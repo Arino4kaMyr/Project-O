@@ -1,2 +1,0 @@
-﻿#test 2
-var n : SquareSum(2..4)

@@ -1,5 +1,17 @@
-﻿#test 2
-var a : Integer(10)
-var b : Integer(15dd)
+﻿class Math is
+  method Square(x: Integer) : Integer is
+    return x.Mult(x)
+  end
 
-var n := a.Plus(b)
+  method SquareSum(x: Integer, y: Integer) : Integer is
+    var sum : Integer(x.Plus(y))
+    return sum.Mult(sum)
+  end
+end
+
+class Program is
+  var m : Math()
+  var a : Integer(3)
+  var b : Integer(4)
+  var result : Integer(m.SquareSum(a, b))
+end

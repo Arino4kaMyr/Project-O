@@ -1,4 +1,4 @@
-﻿class Math is
+﻿class Math extends Class is
   method Square(x: Integer) : Integer is
     return x.Mult(x)
   end

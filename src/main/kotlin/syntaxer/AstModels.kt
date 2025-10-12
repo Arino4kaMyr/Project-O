@@ -33,7 +33,7 @@ sealed class Expr {
     data class RealLit(val v: Double) : Expr()
     data class BoolLit(val v: Boolean) : Expr()
     object This : Expr()
-    data class Ident(val name: String) : Expr()
+    data class Identifier(val name: String) : Expr()
     data class Call(val receiver: Expr?, val method: String, val args: List<Expr>) : Expr()
     data class FieldAccess(val receiver: Expr, val name: String) : Expr()
     data class ClassNameExpr(val cn: ClassName) : Expr()

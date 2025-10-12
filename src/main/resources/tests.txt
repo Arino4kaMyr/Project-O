@@ -1,4 +1,6 @@
 ﻿class Math extends Class is
+  this()
+  this(el: Integer)
   method Square(x: Integer) : Integer is
     return x.Mult(x)
   end

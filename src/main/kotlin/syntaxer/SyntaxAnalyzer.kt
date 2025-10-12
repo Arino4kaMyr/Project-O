@@ -2,62 +2,83 @@ package syntaxer
 
 import exceptions.NotFoundException
 import token.Token
+import token.TokenStream
 import token.TokenType
 import java.util.concurrent.atomic.AtomicInteger
-import kotlin.concurrent.atomics.AtomicInt
 
 class SyntaxAnalyzer(
     val tokens: List<Token>
 ) {
-    private val currInd = AtomicInteger(0)
+    private val ts = TokenStream(tokens)
 
-    fun parseProgram() {
+    fun parseProgram(): Program {
         val listOfClasses = mutableListOf<ClassDecl>()
-        if (tokens[currInd.get()].text == CLASS) {
+        while (ts.matchTokenType(TokenType.KEYWORD) && ts.peek().text == CLASS) {
+            ts.next()
             val classDecl = parseClass()
             listOfClasses.add(classDecl)
         }
         println(listOfClasses.toString())
+        return Program(listOfClasses)
     }
 
     private fun parseClass(): ClassDecl {
-        val className = if (tokens[currInd.incrementAndGet()].type == TokenType.IDENTIFIER) {
-            tokens[currInd.incrementAndGet()].text
+        val tokenName = ts.expect(TokenType.IDENTIFIER)
+        val className = ClassName.Simple(tokenName.text)
 
-        } else {
-            throw NotFoundException("Class name must be exist")
-        }
-
-        var parentName: String? = null
+        var parentName: ClassName? = null
         var members: List<MemberDecl> = emptyList()
-        if (tokens[currInd.get()].type == TokenType.KEYWORD) {
-
-            if (tokens[currInd.get()].text == EXTENDS) {
-                parentName = tokens[currInd.incrementAndGet()].text
-                currInd.incrementAndGet()
-            }
-            if (tokens[currInd.get()].text == START_OF_CODE_BLOCK) {
-                members = parseClassMembers()
-            }
-            return ClassDecl(
-                ClassName.Simple(className),
-                parentName?.let { ClassName.Simple(it) },
-                members
-            )
-        } else {
-            throw NotFoundException("There is no code block in class")
+        if (!ts.matchTokenType(TokenType.KEYWORD)) throw NotFoundException("There is no code block in class")
+        if (ts.matchAndNext(TokenType.KEYWORD, EXTENDS)) {
+            val parentToken = ts.expect(TokenType.IDENTIFIER)
+            parentName = ClassName.Simple(parentToken.text)
         }
+        if (ts.matchAndNext(TokenType.KEYWORD, START_OF_CODE_BLOCK)) {
+            members = parseClassMembers()
+            ts.expectText(END_OF_CODE_BLOCK)
+        }
+        return ClassDecl(
+            className,
+            parentName,
+            members
+        )
     }
 
     private fun parseClassMembers(): List<MemberDecl> {
-        currInd.incrementAndGet()
-        return emptyList()
+        val members = mutableListOf<MemberDecl>()
+
+        while (!(ts.matchTokenType(TokenType.KEYWORD) && ts.peek().text == END_OF_CODE_BLOCK)) {
+            if (ts.matchAndNext(TokenType.KEYWORD, VAR)) {
+                val v = parseVarDecl()
+                members.add(v)
+                continue
+            } else if (ts.matchAndNext(TokenType.KEYWORD, METHOD)) {
+                val m = parseMethodDecl()
+                members.add(m)
+                continue
+            } else if (ts.matchAndNext(TokenType.KEYWORD, CONSTRUCTOR)) {
+                val c = parseConstructorDecl()
+                members.add(c)
+                continue
+            } else throw NotFoundException("Expected some class member")
+        }
+        return members
     }
-    //TODO:Implement methods for parse every entity
+
+    private fun parseVarDecl(): MemberDecl.VarDecl {
+
+    }
+
 
     companion object {
         private const val CLASS = "class"
         private const val EXTENDS = "extends"
         private const val START_OF_CODE_BLOCK = "is"
+        private const val END_OF_CODE_BLOCK = "end"
+
+        //class members
+        private const val VAR = "var"
+        private const val METHOD = "method"
+        private const val CONSTRUCTOR = "this"
     }
 }

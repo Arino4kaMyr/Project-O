@@ -67,8 +67,26 @@ class SyntaxAnalyzer(
     }
 
     private fun parseVarDecl(): MemberDecl.VarDecl {
-        return MemberDecl.VarDecl("empty", Expr.Identifier("empty"))
+        val nameTok = ts.expect(TokenType.IDENTIFIER)
+        val name = nameTok.text
+
+        if (ts.peek().text == ":") ts.next() else throw NotFoundException("Expected : in var decl")
+
+        val typeTok = ts.expect(TokenType.IDENTIFIER)
+        val typeName = typeTok.text
+
+        val initExpr: Expr = if (ts.peek().text == OPEN_BRACKET) {
+            // constructor/call syntax with args
+            val args = parseArgs()
+            Expr.Call(null, typeName, args)
+        } else {
+            // no parentheses
+            Expr.ClassNameExpr(ClassName.Simple(typeName))
+        }
+
+        return MemberDecl.VarDecl(name, initExpr)
     }
+
     private fun parseMethodDecl(): MemberDecl.MethodDecl {
         val nameTok = ts.expect(TokenType.IDENTIFIER)
         val name = nameTok.text
@@ -116,6 +134,12 @@ class SyntaxAnalyzer(
 
     private fun parseMethodBody(): MethodBody.BlockBody {
         return MethodBody.BlockBody(emptyList(), emptyList())
+    }
+
+
+
+    private fun parseConstructorDecl() {
+
     }
 
     companion object {

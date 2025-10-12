@@ -62,13 +62,61 @@ class SyntaxAnalyzer(
                 continue
             } else throw NotFoundException("Expected some class member")
         }
+        ts.next()
         return members
     }
 
     private fun parseVarDecl(): MemberDecl.VarDecl {
+        return MemberDecl.VarDecl("empty", Expr.Identifier("empty"))
+    }
+    private fun parseMethodDecl(): MemberDecl.MethodDecl {
+        val nameTok = ts.expect(TokenType.IDENTIFIER)
+        val name = nameTok.text
 
+        val params = parseParams()
+
+        var returnType: ClassName? = null
+        if (ts.peek().text == ":") {
+            ts.next()
+            val returnTok = ts.expect(TokenType.IDENTIFIER)
+            returnType = ClassName.Simple(returnTok.text)
+        }
+
+        var methodBody: MethodBody? = null
+        if (ts.matchAndNext(TokenType.KEYWORD, START_OF_CODE_BLOCK)) {
+            methodBody = parseMethodBody()
+        }
+
+        return MemberDecl.MethodDecl(name, params, returnType, methodBody)
     }
 
+    private fun parseParams(): List<Param> {
+        val params = mutableListOf<Param>()
+
+        if (ts.matchAndNext(TokenType.SPECIAL_SYMBOL, OPEN_BRACKET)) {
+            while (ts.peek().text != CLOSE_BRACKET) {
+                val nameTok = ts.expect(TokenType.IDENTIFIER)
+                val paramName = nameTok.text
+
+                if (ts.peek().text == ":") ts.next() else throw NotFoundException("Expected ':' in parameter")
+
+                val typeTok = ts.expect(TokenType.IDENTIFIER)
+                val type = ClassName.Simple(typeTok.text)
+                params.add(Param(paramName, type))
+
+                if (ts.peek().text == ",") {
+                    ts.next()
+                    continue
+                }
+            }
+        } else throw NotFoundException("Expected $OPEN_BRACKET before parameters list")
+
+        return params
+    }
+
+    private fun parseMethodBody(): MethodBody.BlockBody {
+        return MethodBody.BlockBody(emptyList(), emptyList())
+    }
 
     companion object {
         private const val CLASS = "class"
@@ -80,5 +128,9 @@ class SyntaxAnalyzer(
         private const val VAR = "var"
         private const val METHOD = "method"
         private const val CONSTRUCTOR = "this"
+
+        //params
+        private const val OPEN_BRACKET = "("
+        private const val CLOSE_BRACKET = ")"
     }
 }

@@ -11,7 +11,8 @@ sealed class ClassName {
 
 sealed class MemberDecl {
     data class VarDecl(val name: String, val init: Expr) : MemberDecl()
-    data class MethodDecl(val name: String, val params: List<Param>, val returnType: ClassName?, val body: MethodBody) : MemberDecl()
+    //method without returnType is a void method. Without body is a declared method only
+    data class MethodDecl(val name: String, val params: List<Param>, val returnType: ClassName?, val body: MethodBody?) : MemberDecl()
     data class ConstructorDecl(val params: List<Param>, val body: MethodBody) : MemberDecl()
 }
 

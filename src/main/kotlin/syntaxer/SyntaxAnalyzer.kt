@@ -4,7 +4,6 @@ import exceptions.NotFoundException
 import token.Token
 import token.TokenStream
 import token.TokenType
-import java.util.concurrent.atomic.AtomicInteger
 
 class SyntaxAnalyzer(
     val tokens: List<Token>
@@ -28,7 +27,10 @@ class SyntaxAnalyzer(
 
         var parentName: ClassName? = null
         var members: List<MemberDecl> = emptyList()
-        if (!ts.matchTokenType(TokenType.KEYWORD)) throw NotFoundException("There is no code block in class")
+
+        // next token should be either 'extends' or 'is'
+        if (!ts.matchTokenType(TokenType.KEYWORD)) throw NotFoundException("There is no code block in class header")
+
         if (ts.matchAndNext(TokenType.KEYWORD, EXTENDS)) {
             val parentToken = ts.expect(TokenType.IDENTIFIER)
             parentName = ClassName.Simple(parentToken.text)
@@ -47,7 +49,8 @@ class SyntaxAnalyzer(
     private fun parseClassMembers(): List<MemberDecl> {
         val members = mutableListOf<MemberDecl>()
 
-        while (!(ts.matchTokenType(TokenType.KEYWORD) && ts.peek().text == END_OF_CODE_BLOCK)) {
+        // loop until we see 'end'
+        while (ts.peek().text != END_OF_CODE_BLOCK) {
             if (ts.matchAndNext(TokenType.KEYWORD, VAR)) {
                 val v = parseVarDecl()
                 members.add(v)
@@ -60,9 +63,11 @@ class SyntaxAnalyzer(
                 val c = parseConstructorDecl()
                 members.add(c)
                 continue
-            } else throw NotFoundException("Expected some class member")
+            } else {
+                throw NotFoundException("Expected class member (var/method/this), but found: ${ts.peek().text}")
+            }
         }
-        ts.next()
+
         return members
     }
 
@@ -70,17 +75,17 @@ class SyntaxAnalyzer(
         val nameTok = ts.expect(TokenType.IDENTIFIER)
         val name = nameTok.text
 
-        if (ts.peek().text == ":") ts.next() else throw NotFoundException("Expected : in var decl")
+        if (ts.peek().text == ":") ts.next() else throw NotFoundException("Expected ':' in var decl, got ${ts.peek().text}")
 
         val typeTok = ts.expect(TokenType.IDENTIFIER)
         val typeName = typeTok.text
 
         val initExpr: Expr = if (ts.peek().text == OPEN_BRACKET) {
-            // constructor/call syntax with args
+            // constructor-like initializer Type(args)
             val args = parseArgs()
             Expr.Call(null, typeName, args)
         } else {
-            // no parentheses
+            // no parentheses — just type name as ClassNameExpr
             Expr.ClassNameExpr(ClassName.Simple(typeName))
         }
 
@@ -112,34 +117,265 @@ class SyntaxAnalyzer(
         val params = mutableListOf<Param>()
 
         if (ts.matchAndNext(TokenType.SPECIAL_SYMBOL, OPEN_BRACKET)) {
-            while (ts.peek().text != CLOSE_BRACKET) {
+            // empty params
+            if (ts.peek().text == CLOSE_BRACKET) {
+                ts.next() // consume ')'
+                return params
+            }
+
+            while (true) {
                 val nameTok = ts.expect(TokenType.IDENTIFIER)
                 val paramName = nameTok.text
 
-                if (ts.peek().text == ":") ts.next() else throw NotFoundException("Expected ':' in parameter")
+                if (ts.peek().text == ":") ts.next() else throw NotFoundException("Expected ':' in parameter, got ${ts.peek().text}")
 
                 val typeTok = ts.expect(TokenType.IDENTIFIER)
                 val type = ClassName.Simple(typeTok.text)
                 params.add(Param(paramName, type))
 
                 if (ts.peek().text == ",") {
-                    ts.next()
+                    ts.next() // consume ','
                     continue
                 }
+
+                if (ts.peek().text == CLOSE_BRACKET) {
+                    ts.next() // consume ')'
+                    break
+                }
+
+                throw NotFoundException("Unexpected token in parameter list: ${ts.peek().text}")
             }
-        } else throw NotFoundException("Expected $OPEN_BRACKET before parameters list")
+        } else {
+            throw NotFoundException("Expected '$OPEN_BRACKET' before parameters list, got ${ts.peek().text}")
+        }
 
         return params
     }
 
+    //parse method body until end
     private fun parseMethodBody(): MethodBody.BlockBody {
-        return MethodBody.BlockBody(emptyList(), emptyList())
+        val vars = mutableListOf<MemberDecl.VarDecl>()
+        val stmts = mutableListOf<Stmt>()
+
+        // while not 'end', each iteration either parses a var-decl (if found) or a statement
+        while (!(ts.matchTokenType(TokenType.KEYWORD) && ts.peek().text == END_OF_CODE_BLOCK)) {
+            if (ts.matchAndNext(TokenType.KEYWORD, VAR)) {
+                // parse a var declaration
+                val v = parseVarDecl()
+                vars.add(v)
+                continue
+            }
+
+            // otherwise parse a statement (return/if/while/assignment/expr)
+            val s = parseStmt()
+            if (s != null) stmts.add(s)
+        }
+
+        // consume closing 'end'
+        ts.next()
+        return MethodBody.BlockBody(vars, stmts)
     }
 
+    private fun parseConstructorDecl(): MemberDecl.ConstructorDecl {
+        val params = mutableListOf<Param>()
 
+        if (ts.matchAndNext(TokenType.SPECIAL_SYMBOL, OPEN_BRACKET)) {
+            if (ts.peek().text == CLOSE_BRACKET) {
+                ts.next()
+            } else {
+                while (true) {
+                    val nameTok = ts.expect(TokenType.IDENTIFIER)
+                    val paramName = nameTok.text
+                    if (ts.peek().text == ":") ts.next() else throw NotFoundException("Expected ':' in constructor parameter")
+                    val typeTok = ts.expect(TokenType.IDENTIFIER)
+                    params.add(Param(paramName, ClassName.Simple(typeTok.text)))
 
-    private fun parseConstructorDecl() {
+                    if (ts.peek().text == ",") {
+                        ts.next()
+                        continue
+                    }
+                    if (ts.peek().text == CLOSE_BRACKET) {
+                        ts.next() // consume ')'
+                        break
+                    }
+                }
+            }
+        } else {
+            throw NotFoundException("Expected '(' after constructor 'this'")
+        }
 
+        // optional body for constructor
+        var body: MethodBody = MethodBody.BlockBody(emptyList(), emptyList())
+        if (ts.matchAndNext(TokenType.KEYWORD, START_OF_CODE_BLOCK)) {
+            body = parseMethodBody() // consumes 'end'
+        }
+
+        return MemberDecl.ConstructorDecl(params, body)
+    }
+
+    private fun parseStmt(): Stmt? {
+        // RETURN
+        if (ts.matchTokenType(TokenType.KEYWORD) && ts.peek().text == RETURN) {
+            ts.next()
+            // return may be followed by expression or no expr
+            if (ts.matchTokenType(TokenType.KEYWORD) && (ts.peek().text == END_OF_CODE_BLOCK || ts.peek().text == ELSE)) {
+                return Stmt.Return(null)
+            }
+            val expr = parseExpr()
+            return Stmt.Return(expr)
+        }
+
+        // WHILE ... loop ... end
+        if (ts.matchTokenType(TokenType.KEYWORD) && ts.peek().text == WHILE) {
+            ts.next() // consume 'while'
+            val cond = parseExpr()
+            if (!(ts.matchTokenType(TokenType.KEYWORD) && ts.peek().text == LOOP)) throw NotFoundException("Expected 'loop' after while condition")
+            ts.next() // consume 'loop'
+            // parse body until 'end' (parseMethodBody consumes 'end')
+            val body = parseMethodBody()
+            return Stmt.While(cond, body)
+        }
+
+        // IF cond THEN ... [else ...] end
+        if (ts.matchTokenType(TokenType.KEYWORD) && ts.peek().text == IF) {
+            ts.next() // consume 'if'
+            val cond = parseExpr()
+
+            if (!(ts.matchTokenType(TokenType.KEYWORD) && ts.peek().text == THEN)) throw NotFoundException("Expected 'then' after if condition")
+            ts.next() // consume 'then'
+
+            // parse then-body until 'else' or 'end'
+            val thenVars = mutableListOf<MemberDecl.VarDecl>()
+            val thenStmts = mutableListOf<Stmt>()
+            while (!(ts.matchTokenType(TokenType.KEYWORD) && (ts.peek().text == ELSE || ts.peek().text == END_OF_CODE_BLOCK))) {
+                if (ts.matchAndNext(TokenType.KEYWORD, VAR)) {
+                    thenVars.add(parseVarDecl()) // consume 'if'
+                    continue
+                }
+                val s = parseStmt()
+                if (s != null) thenStmts.add(s)
+            }
+            val thenBody = MethodBody.BlockBody(thenVars, thenStmts)
+
+            var elseBody: MethodBody? = null
+            if (ts.matchTokenType(TokenType.KEYWORD) && ts.peek().text == ELSE) {
+                ts.next() // consume 'else'
+                val elseVars = mutableListOf<MemberDecl.VarDecl>()
+                val elseStmts = mutableListOf<Stmt>()
+                while (!(ts.matchTokenType(TokenType.KEYWORD) && ts.peek().text == END_OF_CODE_BLOCK)) {
+                    if (ts.matchAndNext(TokenType.KEYWORD, VAR)) {
+                        elseVars.add(parseVarDecl())
+                        continue
+                    }
+                    val s = parseStmt()
+                    if (s != null) elseStmts.add(s)
+                }
+                elseBody = MethodBody.BlockBody(elseVars, elseStmts)
+            }
+
+            // consume 'end' of if
+            val endTok = ts.expect(TokenType.KEYWORD)
+            if (endTok.text != END_OF_CODE_BLOCK) throw NotFoundException("Expected 'end' after if, got ${endTok.text}")
+
+            return Stmt.If(cond, thenBody, elseBody)
+        }
+
+        // Assignment: IDENTIFIER ':=' expr
+        if (ts.matchTokenType(TokenType.IDENTIFIER)) {
+            val idTok = ts.next()
+            if (ts.peek().text == ASSIGN) {
+                ts.next() // consume ':='
+                val expr = parseExpr()
+                return Stmt.Assignment(idTok.text, expr)
+            } else {
+
+            }
+        }
+
+        throw NotFoundException("Unknown statement start: ${ts.peek().text}")
+    }
+
+    private fun parseExpr(): Expr {
+        var left = parsePrimary()
+
+        // support chained accesses/calls: left.Name(...) or left.Name
+        while (ts.peek().text == ".") {
+            ts.next() // consume '.'
+            val nameTok = ts.expect(TokenType.IDENTIFIER)
+            val name = nameTok.text
+            if (ts.peek().text == OPEN_BRACKET) {
+                val args = parseArgs()
+                left = Expr.Call(left, name, args)
+            } else {
+                left = Expr.FieldAccess(left, name)
+            }
+        }
+
+        return left
+    }
+
+    private fun parsePrimary(): Expr {
+        val p = ts.peek()
+        when (p.type) {
+            TokenType.NUMBER -> {
+                val n = ts.next()
+                return Expr.IntLit(n.text.toLong())
+            }
+            TokenType.IDENTIFIER -> {
+                val idTok = ts.next()
+                if (ts.peek().text == OPEN_BRACKET) {
+                    val args = parseArgs()
+                    return Expr.Call(null, idTok.text, args)
+                }
+                return Expr.Identifier(idTok.text)
+            }
+            TokenType.KEYWORD -> {
+                if (p.text == THIS) {
+                    ts.next()
+                    return Expr.This
+                }
+            }
+            TokenType.SPECIAL_SYMBOL -> {
+                if (p.text == OPEN_BRACKET) {
+                    ts.next() // consume '('
+                    val inner = parseExpr()
+                    val close = ts.expect(TokenType.SPECIAL_SYMBOL)
+                    if (close.text != CLOSE_BRACKET) throw NotFoundException("Expected ')', got ${close.text}")
+                    return inner
+                }
+            }
+            else -> {
+                // fallthrough
+            }
+        }
+        throw NotFoundException("Unknown primary expression: ${p.text}")
+    }
+
+    private fun parseArgs(): List<Expr> {
+        val args = mutableListOf<Expr>()
+        // current token must be '('
+        val open = ts.expect(TokenType.SPECIAL_SYMBOL)
+        if (open.text != OPEN_BRACKET) throw NotFoundException("Expected '(' to start args, got ${open.text}")
+
+        if (ts.peek().text == CLOSE_BRACKET) {
+            ts.next() // consume ')'
+            return args
+        }
+
+        while (true) {
+            val e = parseExpr()
+            args.add(e)
+            if (ts.peek().text == ",") {
+                ts.next()
+                continue
+            }
+            if (ts.peek().text == CLOSE_BRACKET) {
+                ts.next() // consume ')'
+                break
+            }
+            throw NotFoundException("Unexpected token in arguments: ${ts.peek().text}")
+        }
+        return args
     }
 
     companion object {
@@ -148,13 +384,25 @@ class SyntaxAnalyzer(
         private const val START_OF_CODE_BLOCK = "is"
         private const val END_OF_CODE_BLOCK = "end"
 
-        //class members
+        // class members
         private const val VAR = "var"
         private const val METHOD = "method"
         private const val CONSTRUCTOR = "this"
 
-        //params
+        // params / symbols
         private const val OPEN_BRACKET = "("
         private const val CLOSE_BRACKET = ")"
+
+        // other keywords
+        private const val WHILE = "while"
+        private const val LOOP = "loop"
+        private const val IF = "if"
+        private const val THEN = "then"
+        private const val ELSE = "else"
+        private const val RETURN = "return"
+        private const val THIS = "this"
+
+        // symbols
+        private const val ASSIGN = ":="
     }
 }

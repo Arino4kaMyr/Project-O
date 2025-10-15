@@ -2,6 +2,11 @@
   this()
   this(el: Integer)
   method Square(x: Integer) : Integer is
+    while i.LessEqual(a.Size) loop
+     x := a.get(i)
+     a.set(i,x.Mult(x))
+     i := i.Plus(1)
+    end
     return x.Mult(x)
   end
 
@@ -14,6 +19,6 @@ end
 class Program is
   var m : Math()
   var a : Integer(3)
-  var b : Integer(4)
+  var b : Integer(4.0)
   var result : Integer(m.SquareSum(a, b))
 end

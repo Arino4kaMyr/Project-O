@@ -288,12 +288,38 @@ class SyntaxAnalyzer(
                 val expr = parseExpr()
                 return Stmt.Assignment(idTok.text, expr)
             } else {
-                //TODO: if line is identifier but not assign. Maybe call some method like(print())
-                //Think hot to implement this issue
+                val expr = parseExprStartingWithIdentifier(idTok)
+                return Stmt.ExprStmt(expr)
             }
         }
 
         throw NotFoundException("Unknown statement start: ${ts.peek().text}")
+    }
+
+    private fun parseExprStartingWithIdentifier(firstTok: Token): Expr {
+        var expr: Expr = Expr.Identifier(firstTok.text)
+
+        // если сразу '(' после идентификатора. Например метод print()
+        if (ts.peek().text == OPEN_BRACKET) {
+            val args = parseArgs()
+            expr = Expr.Call(null, firstTok.text, args)
+        }
+
+        // поддерживаем цепочку .Name или .Name(args). несколько подряд может вызваться
+        while (ts.peek().text == ".") {
+            ts.next() // consume '.'
+            val nameTok = ts.expect(TokenType.IDENTIFIER)
+            val name = nameTok.text
+            if (ts.peek().text == OPEN_BRACKET) {
+                val args = parseArgs()
+                // метод вызывается на текущем выражении как receiver
+                expr = Expr.Call(expr, name, args)
+            } else {
+                expr = Expr.FieldAccess(expr, name)
+            }
+        }
+
+        return expr
     }
 
     private fun parseExpr(): Expr {
@@ -319,8 +345,15 @@ class SyntaxAnalyzer(
         val p = ts.peek()
         when (p.type) {
             TokenType.NUMBER -> {
-                val n = ts.next()
-                return Expr.IntLit(n.text.toLong())
+                val token = ts.next()
+
+                val expr = if (token.text.contains('.') || token.text.contains('e', ignoreCase = true)) {
+                    Expr.RealLit(token.text.toDouble())
+                } else {
+                    Expr.IntLit(token.text.toLong())
+                }
+
+                return expr
             }
             TokenType.IDENTIFIER -> {
                 val idTok = ts.next()
@@ -346,7 +379,8 @@ class SyntaxAnalyzer(
                 }
             }
             else -> {
-                // TODO: If we have some parameters extra guess how to implement
+                //TODO: If we have some parameters extra guess how to implement
+                // We need add TokenType.BOOLEAN in lexer
             }
         }
         throw NotFoundException("Unknown primary expression: ${p.text}")

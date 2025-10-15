@@ -27,6 +27,7 @@ sealed class Stmt {
     data class While(val cond: Expr, val body: MethodBody) : Stmt()
     data class If(val cond: Expr, val thenBody: MethodBody, val elseBody: MethodBody?) : Stmt()
     data class Return(val expr: Expr?) : Stmt()
+    data class ExprStmt(val expr: Expr) : Stmt()
 }
 
 sealed class Expr {

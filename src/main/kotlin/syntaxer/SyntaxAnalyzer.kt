@@ -288,7 +288,8 @@ class SyntaxAnalyzer(
                 val expr = parseExpr()
                 return Stmt.Assignment(idTok.text, expr)
             } else {
-
+                //TODO: if line is identifier but not assign. Maybe call some method like(print())
+                //Think hot to implement this issue
             }
         }
 
@@ -298,7 +299,7 @@ class SyntaxAnalyzer(
     private fun parseExpr(): Expr {
         var left = parsePrimary()
 
-        // support chained accesses/calls: left.Name(...) or left.Name
+        // left.Name(...) or left.Name (to method, or to field)
         while (ts.peek().text == ".") {
             ts.next() // consume '.'
             val nameTok = ts.expect(TokenType.IDENTIFIER)
@@ -345,7 +346,7 @@ class SyntaxAnalyzer(
                 }
             }
             else -> {
-                // fallthrough
+                // TODO: If we have some parameters extra guess how to implement
             }
         }
         throw NotFoundException("Unknown primary expression: ${p.text}")

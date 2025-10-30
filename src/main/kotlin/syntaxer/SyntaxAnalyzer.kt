@@ -29,7 +29,7 @@ class SyntaxAnalyzer(
         var members: List<MemberDecl> = emptyList()
 
         // next token should be either 'extends' or 'is'
-        if (!ts.matchTokenType(TokenType.KEYWORD)) throw NotFoundException("There is no code block in class header")
+        if (!ts.matchTokenType(TokenType.KEYWORD)) throw NotFoundException("There is no code block in class header in line ${ts.peek().line}")
 
         if (ts.matchAndNext(TokenType.KEYWORD, EXTENDS)) {
             val parentToken = ts.expect(TokenType.IDENTIFIER)
@@ -64,7 +64,7 @@ class SyntaxAnalyzer(
                 members.add(c)
                 continue
             } else {
-                throw NotFoundException("Expected class member (var/method/this), but found: ${ts.peek().text}")
+                throw NotFoundException("Expected class member (var/method/this), but found: ${ts.peek().text} in line ${ts.peek().line}")
             }
         }
 
@@ -75,7 +75,7 @@ class SyntaxAnalyzer(
         val nameTok = ts.expect(TokenType.IDENTIFIER)
         val name = nameTok.text
 
-        if (ts.peek().text == ":") ts.next() else throw NotFoundException("Expected ':' in var decl, got ${ts.peek().text}")
+        if (ts.peek().text == ":") ts.next() else throw NotFoundException("Expected ':' in var decl, got ${ts.peek().text} in line ${ts.peek().line}")
 
         val typeTok = ts.expect(TokenType.IDENTIFIER)
         val typeName = typeTok.text
@@ -127,7 +127,7 @@ class SyntaxAnalyzer(
                 val nameTok = ts.expect(TokenType.IDENTIFIER)
                 val paramName = nameTok.text
 
-                if (ts.peek().text == ":") ts.next() else throw NotFoundException("Expected ':' in parameter, got ${ts.peek().text}")
+                if (ts.peek().text == ":") ts.next() else throw NotFoundException("Expected ':' in parameter, got ${ts.peek().text} in line ${ts.peek().line}")
 
                 val typeTok = ts.expect(TokenType.IDENTIFIER)
                 val type = ClassName.Simple(typeTok.text)
@@ -143,10 +143,10 @@ class SyntaxAnalyzer(
                     break
                 }
 
-                throw NotFoundException("Unexpected token in parameter list: ${ts.peek().text}")
+                throw NotFoundException("Unexpected token in parameter list: ${ts.peek().text} in line ${ts.peek().line}")
             }
         } else {
-            throw NotFoundException("Expected '$OPEN_BRACKET' before parameters list, got ${ts.peek().text}")
+            throw NotFoundException("Expected '$OPEN_BRACKET' before parameters list, got ${ts.peek().text} in line ${ts.peek().line}")
         }
 
         return params
@@ -186,7 +186,7 @@ class SyntaxAnalyzer(
                 while (true) {
                     val nameTok = ts.expect(TokenType.IDENTIFIER)
                     val paramName = nameTok.text
-                    if (ts.peek().text == ":") ts.next() else throw NotFoundException("Expected ':' in constructor parameter")
+                    if (ts.peek().text == ":") ts.next() else throw NotFoundException("Expected ':' in constructor parameter in line ${ts.peek().line}")
                     val typeTok = ts.expect(TokenType.IDENTIFIER)
                     params.add(Param(paramName, ClassName.Simple(typeTok.text)))
 
@@ -201,7 +201,7 @@ class SyntaxAnalyzer(
                 }
             }
         } else {
-            throw NotFoundException("Expected '(' after constructor 'this'")
+            throw NotFoundException("Expected '(' after constructor 'this' in line ${ts.peek().line}")
         }
 
         // optional body for constructor
@@ -229,7 +229,7 @@ class SyntaxAnalyzer(
         if (ts.matchTokenType(TokenType.KEYWORD) && ts.peek().text == WHILE) {
             ts.next() // consume 'while'
             val cond = parseExpr()
-            if (!(ts.matchTokenType(TokenType.KEYWORD) && ts.peek().text == LOOP)) throw NotFoundException("Expected 'loop' after while condition")
+            if (!(ts.matchTokenType(TokenType.KEYWORD) && ts.peek().text == LOOP)) throw NotFoundException("Expected 'loop' after while condition in line ${ts.peek().line}")
             ts.next() // consume 'loop'
             // parse body until 'end' (parseMethodBody consumes 'end')
             val body = parseMethodBody()
@@ -241,7 +241,7 @@ class SyntaxAnalyzer(
             ts.next() // consume 'if'
             val cond = parseExpr()
 
-            if (!(ts.matchTokenType(TokenType.KEYWORD) && ts.peek().text == THEN)) throw NotFoundException("Expected 'then' after if condition")
+            if (!(ts.matchTokenType(TokenType.KEYWORD) && ts.peek().text == THEN)) throw NotFoundException("Expected 'then' after if condition in line ${ts.peek().line}")
             ts.next() // consume 'then'
 
             // parse then-body until 'else' or 'end'
@@ -275,7 +275,7 @@ class SyntaxAnalyzer(
 
             // consume 'end' of if
             val endTok = ts.expect(TokenType.KEYWORD)
-            if (endTok.text != END_OF_CODE_BLOCK) throw NotFoundException("Expected 'end' after if, got ${endTok.text}")
+            if (endTok.text != END_OF_CODE_BLOCK) throw NotFoundException("Expected 'end' after if, got ${endTok.text} in line ${endTok.line}")
 
             return Stmt.If(cond, thenBody, elseBody)
         }
@@ -293,7 +293,7 @@ class SyntaxAnalyzer(
             }
         }
 
-        throw NotFoundException("Unknown statement start: ${ts.peek().text}")
+        throw NotFoundException("Unknown statement start: ${ts.peek().text} in line ${ts.peek().line}")
     }
 
     private fun parseExprStartingWithIdentifier(firstTok: Token): Expr {
@@ -374,7 +374,7 @@ class SyntaxAnalyzer(
                     ts.next() // consume '('
                     val inner = parseExpr()
                     val close = ts.expect(TokenType.SPECIAL_SYMBOL)
-                    if (close.text != CLOSE_BRACKET) throw NotFoundException("Expected ')', got ${close.text}")
+                    if (close.text != CLOSE_BRACKET) throw NotFoundException("Expected ')', got ${close.text} in line ${close.line}")
                     return inner
                 }
             }
@@ -383,14 +383,14 @@ class SyntaxAnalyzer(
                 // We need add TokenType.BOOLEAN in lexer
             }
         }
-        throw NotFoundException("Unknown primary expression: ${p.text}")
+        throw NotFoundException("Unknown primary expression: ${p.text} in line ${p.line}")
     }
 
     private fun parseArgs(): List<Expr> {
         val args = mutableListOf<Expr>()
         // current token must be '('
         val open = ts.expect(TokenType.SPECIAL_SYMBOL)
-        if (open.text != OPEN_BRACKET) throw NotFoundException("Expected '(' to start args, got ${open.text}")
+        if (open.text != OPEN_BRACKET) throw NotFoundException("Expected '(' to start args, got ${open.text} in line ${open.text}")
 
         if (ts.peek().text == CLOSE_BRACKET) {
             ts.next() // consume ')'
@@ -408,7 +408,7 @@ class SyntaxAnalyzer(
                 ts.next() // consume ')'
                 break
             }
-            throw NotFoundException("Unexpected token in arguments: ${ts.peek().text}")
+            throw NotFoundException("Unexpected token in arguments: ${ts.peek().text} in line ${ts.peek().line}")
         }
         return args
     }

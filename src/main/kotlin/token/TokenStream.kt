@@ -10,14 +10,14 @@ class TokenStream(private val tokens: List<Token>) {
     fun expect(type: TokenType): Token {
         val t = peek()
         if (t.type != type) {
-            throw NotFoundException("Expected $type but found '${t.type}'")
+            throw NotFoundException("Expected $type but found '${t.type}' in line ${t.line}")
         }
         return next()
     }
     fun expectText(textValue: String): Token {
         val t = peek()
         if (t.text != textValue) {
-            throw NotFoundException("Expected $textValue but found '${t.text}")
+            throw NotFoundException("Expected $textValue but found '${t.text} in line ${t.line}")
         }
         return next()
     }

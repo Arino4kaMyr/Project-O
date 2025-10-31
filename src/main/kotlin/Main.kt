@@ -1,5 +1,6 @@
 import constants.MainConstants
 import lexer.Lexer
+import syntaxer.SyntaxAnalyzer
 import token.TokenType
 import kotlin.system.exitProcess
 
@@ -36,6 +37,7 @@ fun main() {
     }
 
     val tokens = lexer.scan(text)
+
     tokens.forEach { token ->
         if (token.type == TokenType.ERROR) {
             println("Error: '${token.text}' at line ${token.line} - ${token.errorMessage}")
@@ -43,4 +45,7 @@ fun main() {
             println("${token.text} : ${token.type}")
         }
     }
+
+    val syntaxAnalyzer = SyntaxAnalyzer(tokens)
+    syntaxAnalyzer.parseProgram()
 }

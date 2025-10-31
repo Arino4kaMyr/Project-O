@@ -1,0 +1,9 @@
+class Program is
+  method Square(x: Integer) is
+    while i.LessEqual(a.Size) loop
+      x := a.get(i)
+      a.set(i,x.Mult(x))
+      i := i.Plus(1)
+    end
+  end
+end

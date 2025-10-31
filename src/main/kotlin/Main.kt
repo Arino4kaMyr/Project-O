@@ -40,7 +40,7 @@ fun main() {
 
     tokens.forEach { token ->
         if (token.type == TokenType.ERROR) {
-            println("Error: '${token.text}' - ${token.errorMessage}")
+            println("Error: '${token.text}' at line ${token.line} - ${token.errorMessage}")
         } else {
             println("${token.text} : ${token.type}")
         }

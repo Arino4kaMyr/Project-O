@@ -20,14 +20,23 @@ class Lexer {
         var i = 0
         val token = StringBuilder()
         val tokens = mutableListOf<Token>()
-        var line = 1
+        var tokenStartIndex = 0
         var errorMode = false
+        
+        fun getLineNumber(pos: Int): Int {
+            var line = 1
+            for (j in 0 until pos) {
+                if (j < text.length && text[j] == '\n') line++
+            }
+            return line
+        }
 
         while (i < text.length) {
             val c = text[i]
+            
             if (errorMode) {
                 if (isEmpty(c)) {
-                    addToken(tokens, token.toString(), TokenType.ERROR, line, "Invalid token")
+                    addToken(tokens, token.toString(), TokenType.ERROR, getLineNumber(tokenStartIndex), "Invalid token")
                     token.clear()
                     errorMode = false
                     i++
@@ -41,8 +50,9 @@ class Lexer {
                 while (i < text.length && text[i] != '\n'){
                     i++
                 }
-                i++
-                line++
+                if (i < text.length && text[i] == '\n') {
+                    i++
+                }
                 continue
             }
 
@@ -50,6 +60,7 @@ class Lexer {
             when (state) {
                 State.START -> {
                     token.clear()
+                    tokenStartIndex = i
                     when {
                         isLetter(c) -> {
                             token.append(c)
@@ -65,12 +76,12 @@ class Lexer {
                             token.append(c)
                             if (c == ':' && i + 1 < text.length && text[i + 1] == '=') {
                                 token.append('=')
-                                addToken(tokens, token.toString(), TokenType.SPECIAL_SYMBOL, line)
+                                addToken(tokens, token.toString(), TokenType.SPECIAL_SYMBOL, getLineNumber(tokenStartIndex))
                                 i += 2
                                 state = State.START
                                 token.clear()
                             } else {
-                                addToken(tokens, token.toString(), TokenType.SPECIAL_SYMBOL, line)
+                                addToken(tokens, token.toString(), TokenType.SPECIAL_SYMBOL, getLineNumber(tokenStartIndex))
                                 i++
                                 state = State.START
                                 token.clear()
@@ -92,7 +103,7 @@ class Lexer {
                         }
                         isEmpty(c) || c in symbols-> {
                             if(numRegex.matches(token.toString())) {
-                                addToken(tokens, token.toString(), TokenType.NUMBER, line)
+                                addToken(tokens, token.toString(), TokenType.NUMBER, getLineNumber(tokenStartIndex))
                                 token.clear()
                                 state = State.START
                             } else {
@@ -116,11 +127,11 @@ class Lexer {
                         }
                         isEmpty(c) || c in symbols-> {
                             if (token.toString() in KEYWORDS){
-                                addToken(tokens, token.toString(), TokenType.KEYWORD, line)
+                                addToken(tokens, token.toString(), TokenType.KEYWORD, getLineNumber(tokenStartIndex))
                                 token.clear()
                                 state = State.START
                             } else {
-                                addToken(tokens, token.toString(), TokenType.IDENTIFIER, line)
+                                addToken(tokens, token.toString(), TokenType.IDENTIFIER, getLineNumber(tokenStartIndex))
                                 token.clear()
                                 state = State.START
                             }
@@ -134,22 +145,19 @@ class Lexer {
                     }
                 }
             }
-            if (c == '\n') {
-                line++
-                i++
-            }
+
         }
 
         if (token.isNotEmpty()) {
             if (errorMode) {
-                addToken(tokens, token.toString(), TokenType.ERROR, line, "Invalid token")
+                addToken(tokens, token.toString(), TokenType.ERROR, getLineNumber(tokenStartIndex), "Invalid token")
             } else {
                 val finalType = when (state) {
                     State.NUM -> TokenType.NUMBER
                     State.IDEN -> TokenType.IDENTIFIER
                     else -> TokenType.SPECIAL_SYMBOL
                 }
-                addToken(tokens, token.toString(), finalType, line)
+                addToken(tokens, token.toString(), finalType, getLineNumber(tokenStartIndex))
             }
         }
 

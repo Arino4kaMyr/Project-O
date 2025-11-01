@@ -1,5 +1,8 @@
 class Program is
+  var a : Array
   method Square(x: Integer) is
+    var i : Integer
+    i := 0
     while i.LessEqual(a.Size) loop
       x := a.get(i)
       a.set(i,x.Mult(x))

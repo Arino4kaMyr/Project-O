@@ -14,12 +14,10 @@ class SemanticAnalyzer(private val program: Program) {
         classDecl.members.forEach { member ->
             when (member) {
                 is MemberDecl.VarDecl -> {
-                    // Поле класса
                     val varType = extractTypeFromInit(member.init)
                     symbolTable.addSymbol(Symbol(member.name, varType))
                 }
                 is MemberDecl.MethodDecl -> {
-                    // Параметры метода
                     member.params.forEach { param ->
                         symbolTable.addSymbol(Symbol(param.name, param.type))
                     }
@@ -40,7 +38,6 @@ class SemanticAnalyzer(private val program: Program) {
     private fun analyzeMethodBody(body: MethodBody, symbolTable: SymbolTable) {
         when (body) {
             is MethodBody.BlockBody -> {
-                // Локальные переменные
                 body.vars.forEach { varDecl ->
                     val varType = extractTypeFromInit(varDecl.init)
                     symbolTable.addSymbol(Symbol(varDecl.name, varType))

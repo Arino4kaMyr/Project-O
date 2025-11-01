@@ -17,9 +17,6 @@ class SymbolTable {
         symbols.clear()
     }
 
-    /**
-     * Печать таблицы символов
-     */
     fun print() {
         println("\n========== Symbol Table ==========")
         if (symbols.isEmpty()) {

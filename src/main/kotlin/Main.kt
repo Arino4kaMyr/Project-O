@@ -1,5 +1,7 @@
 import constants.MainConstants
 import lexer.Lexer
+import semantic.SemanticAnalyzer
+import semantic.SymbolTable
 import syntaxer.SyntaxAnalyzer
 import token.TokenType
 import kotlin.system.exitProcess
@@ -42,10 +44,16 @@ fun main() {
         if (token.type == TokenType.ERROR) {
             println("Error: '${token.text}' at line ${token.line} - ${token.errorMessage}")
         } else {
-            println("${token.text} : ${token.type}")
+            println("${token.text} : ${token.type}" )
         }
     }
 
     val syntaxAnalyzer = SyntaxAnalyzer(tokens)
-    syntaxAnalyzer.parseProgram()
+    val program = syntaxAnalyzer.parseProgram()
+    
+    val symbolTable = SymbolTable()
+    val semanticAnalyzer = SemanticAnalyzer(program)
+    semanticAnalyzer.analyze(symbolTable)
+    
+    symbolTable.print()
 }

@@ -31,8 +31,37 @@ class ClassTable {
         classes.values.forEach { cls ->
             println("Class: ${cls.name}")
             println("  Parent: ${cls.parentClass?.name ?: "none"}")
-            println("  Fields: ${cls.fields.keys.joinToString()}")
-            println("  Methods: ${cls.methods.keys.joinToString()}")
+            
+            // Таблица переменных класса (поля)
+            println("  Fields:")
+            if (cls.fields.isEmpty()) {
+                println("    (no fields)")
+            } else {
+                cls.fields.values.forEach { field ->
+                    val typeName = when (field.type) {
+                        is ClassName.Simple -> field.type.name
+                    }
+                    println("    ${field.name} : $typeName")
+                }
+            }
+            
+            // Таблица методов класса
+            println("  Methods:")
+            if (cls.methods.isEmpty()) {
+                println("    (no methods)")
+            } else {
+                cls.methods.forEach { (methodName, methodList) ->
+                    methodList.forEach { method ->
+                        val paramsStr = method.params.joinToString(", ") { "${it.name}: ${when(it.type) { is ClassName.Simple -> it.type.name } }" }
+                        val returnTypeStr = method.returnType?.let { when(it) { is ClassName.Simple -> it.name } } ?: "void"
+                        println("    ${method.name}($paramsStr) : $returnTypeStr")
+                        
+                        // Таблица символов метода
+                        println("      Symbol Table:")
+                        method.symbolTable.print()
+                    }
+                }
+            }
             println()
         }
         println("=================================\n")

@@ -1,7 +1,8 @@
 import constants.MainConstants
+import exceptions.SematicException
 import lexer.Lexer
 import semantic.SemanticAnalyzer
-import semantic.tables.SymbolTable
+import syntaxer.AstPrinter
 import syntaxer.SyntaxAnalyzer
 import token.TokenType
 import kotlin.system.exitProcess
@@ -48,14 +49,25 @@ fun main() {
         }
     }
 
-    val syntaxAnalyzer = SyntaxAnalyzer(tokens)
-    val program = syntaxAnalyzer.parseProgram()
-    
-    val semanticAnalyzer = SemanticAnalyzer(program)
-    semanticAnalyzer.analyze()
-
-
-
-    semanticAnalyzer.symbolTable.print()
-    semanticAnalyzer.classTable.print()
+    try {
+        val syntaxAnalyzer = SyntaxAnalyzer(tokens)
+        val program = syntaxAnalyzer.parseProgram()
+        
+        val semanticAnalyzer = SemanticAnalyzer(program)
+        semanticAnalyzer.analyze()
+        
+        // Выводим таблицы классов (с полями и методами)
+        semanticAnalyzer.classTable.print()
+        
+        // Выводим оптимизированный AST
+        val optimizedProgram = semanticAnalyzer.getOptimizedProgram()
+        println("\n" + "=".repeat(30) + "Optimized AST" + "=".repeat(30))
+        AstPrinter.print(optimizedProgram)
+    } catch (e: SematicException) {
+        println("\nSemantic Error: ${e.message}")
+        exitProcess(1)
+    } catch (e: Exception) {
+        println("\nError: ${e.message}")
+        exitProcess(1)
+    }
 }

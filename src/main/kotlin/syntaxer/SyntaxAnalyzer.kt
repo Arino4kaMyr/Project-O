@@ -17,8 +17,11 @@ class SyntaxAnalyzer(
             val classDecl = parseClass()
             listOfClasses.add(classDecl)
         }
-        println(listOfClasses.toString())
-        return Program(listOfClasses)
+        val program = Program(listOfClasses)
+
+        AstPrinter.print(program)
+        
+        return program
     }
 
     private fun parseClass(): ClassDecl {

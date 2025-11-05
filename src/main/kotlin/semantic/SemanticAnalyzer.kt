@@ -1,5 +1,6 @@
 package semantic
 
+import semantic.tables.SymbolTable
 import syntaxer.*
 
 class SemanticAnalyzer(private val program: Program) {

@@ -1,7 +1,7 @@
 import constants.MainConstants
 import lexer.Lexer
 import semantic.SemanticAnalyzer
-import semantic.SymbolTable
+import semantic.tables.SymbolTable
 import syntaxer.SyntaxAnalyzer
 import token.TokenType
 import kotlin.system.exitProcess

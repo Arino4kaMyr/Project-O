@@ -1,4 +1,8 @@
-package semantic
+package semantic.tables
+
+import semantic.Symbol
+import semantic.VarSymbol
+import syntaxer.ClassName
 
 class SymbolTable {
     private val symbols: MutableList<Symbol> = mutableListOf()
@@ -25,7 +29,7 @@ class SymbolTable {
             symbols.forEach { symbol ->
                 if (symbol is VarSymbol) {
                     val typeName = when (symbol.type) {
-                        is syntaxer.ClassName.Simple -> symbol.type.name
+                        is ClassName.Simple -> symbol.type.name
                     }
                     println("  ${symbol.name} : $typeName")
                 }
@@ -35,4 +39,3 @@ class SymbolTable {
         println("=====================================\n")
     }
 }
-

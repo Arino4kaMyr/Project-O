@@ -51,9 +51,11 @@ fun main() {
     val syntaxAnalyzer = SyntaxAnalyzer(tokens)
     val program = syntaxAnalyzer.parseProgram()
     
-    val symbolTable = SymbolTable()
     val semanticAnalyzer = SemanticAnalyzer(program)
-    semanticAnalyzer.analyze(symbolTable)
-    
-    symbolTable.print()
+    semanticAnalyzer.analyze()
+
+
+
+    semanticAnalyzer.symbolTable.print()
+    semanticAnalyzer.classTable.print()
 }

@@ -1,13 +1,19 @@
 package semantic
 
+import semantic.tables.ClassTable
 import semantic.tables.SymbolTable
 import syntaxer.*
 
 class SemanticAnalyzer(private val program: Program) {
+    val symbolTable = SymbolTable()
+    val classTable = ClassTable()
     
-    fun analyze(symbolTable: SymbolTable) {
+    fun analyze() {
         program.classes.forEach { classDecl ->
             analyzeClass(classDecl, symbolTable)
+
+            val classSymbol = ClassSymbol((classDecl.name as ClassName.Simple).name, classDecl)
+            classTable.addClass(classSymbol)
         }
     }
 

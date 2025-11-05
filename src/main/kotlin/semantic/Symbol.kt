@@ -11,7 +11,7 @@ class ClassSymbol(
     val astNode: ClassDecl
 ) : Symbol(name) {
     val fields = mutableMapOf<String, VarSymbol>()
-    val methods = mutableMapOf<String, MethodSymbol>()
+    val methods = mutableMapOf<String, MutableList<MethodSymbol>>()  // Поддержка перегрузки методов
     var parentClass: ClassSymbol? = null
 
     // Проверка на наличие поля/метода с учётом наследования
@@ -19,8 +19,30 @@ class ClassSymbol(
         return fields[fieldName] ?: parentClass?.findField(fieldName)
     }
 
+    // Найти все методы с данным именем (с учетом наследования)
+    fun findMethods(methodName: String): List<MethodSymbol> {
+        val localMethods = methods[methodName] ?: emptyList()
+        val parentMethods = parentClass?.findMethods(methodName) ?: emptyList()
+        return localMethods + parentMethods
+    }
+
+    // Найти метод по имени (для обратной совместимости, возвращает первый)
     fun findMethod(methodName: String): MethodSymbol? {
-        return methods[methodName] ?: parentClass?.findMethod(methodName)
+        return methods[methodName]?.firstOrNull() ?: parentClass?.findMethod(methodName)
+    }
+    
+    // Проверка, есть ли метод с такой же сигнатурой
+    fun hasMethodWithSignature(methodName: String, paramTypes: List<ClassName>): Boolean {
+        val methodsWithName = findMethods(methodName)
+        return methodsWithName.any { method ->
+            if (method.params.size != paramTypes.size) {
+                false
+            } else {
+                method.params.mapIndexed { index, param -> param.type }.zip(paramTypes).all { (type1, type2) ->
+                    type1 is ClassName.Simple && type2 is ClassName.Simple && type1.name == type2.name
+                }
+            }
+        }
     }
 
     // Проверка на циклы наследования
@@ -67,6 +89,7 @@ class MethodSymbol(
     val astNode: MemberDecl.MethodDecl
 ) : Symbol(name) {
     var ownerClass: ClassSymbol? = null
+    val symbolTable = semantic.tables.MethodTable()  // Таблица символов метода
 }
 
 // ============ Символ конструктора ============

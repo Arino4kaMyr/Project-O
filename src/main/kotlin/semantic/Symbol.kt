@@ -14,24 +14,32 @@ class ClassSymbol(
     val methods = mutableMapOf<String, MutableList<MethodSymbol>>()  // Поддержка перегрузки методов
     var parentClass: ClassSymbol? = null
 
-    // Проверка на наличие поля/метода с учётом наследования
+    /**
+     * Найти поле по имени (с учётом наследования)
+     */
     fun findField(fieldName: String): VarSymbol? {
         return fields[fieldName] ?: parentClass?.findField(fieldName)
     }
 
-    // Найти все методы с данным именем (с учетом наследования)
+    /**
+     * Найти все методы по имени (с учётом наследования)
+     */
     fun findMethods(methodName: String): List<MethodSymbol> {
         val localMethods = methods[methodName] ?: emptyList()
         val parentMethods = parentClass?.findMethods(methodName) ?: emptyList()
         return localMethods + parentMethods
     }
 
-    // Найти метод по имени (для обратной совместимости, возвращает первый)
+    /**
+     * Найти метод по имени (возвращает первый)
+     */
     fun findMethod(methodName: String): MethodSymbol? {
         return methods[methodName]?.firstOrNull() ?: parentClass?.findMethod(methodName)
     }
     
-    // Проверка, есть ли метод с такой же сигнатурой
+    /**
+     * Проверить наличие метода с указанной сигнатурой
+     */
     fun hasMethodWithSignature(methodName: String, paramTypes: List<ClassName>): Boolean {
         val methodsWithName = findMethods(methodName)
         return methodsWithName.any { method ->
@@ -45,7 +53,9 @@ class ClassSymbol(
         }
     }
 
-    // Проверка на циклы наследования
+    /**
+     * Проверить наличие цикла наследования
+     */
     fun hasInheritanceCycle(): Boolean {
         val visited = mutableSetOf<ClassSymbol>()
         var current: ClassSymbol? = this
@@ -58,7 +68,9 @@ class ClassSymbol(
         return false
     }
 
-    // Проверка на подтип
+    /**
+     * Проверить, является ли подклассом указанного класса
+     */
     fun isSubclassOf(other: ClassSymbol): Boolean {
         var current: ClassSymbol? = this
         while (current != null) {

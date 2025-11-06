@@ -1,0 +1,20 @@
+class Math is
+  method F(x: Integer) : Integer is
+    var y : Integer(1)
+    return x
+    y := 2
+    while x.Less(10) loop
+      x := x.Plus(1)
+    end
+    if x.Greater(0) then
+      x := 0
+    else
+      x := 1
+    end
+  end
+end
+
+class Program is
+  var m : Math()
+  var r : Integer(m.F(5))
+end

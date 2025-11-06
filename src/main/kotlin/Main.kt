@@ -61,8 +61,7 @@ fun main() {
         
         // Выводим оптимизированный AST
         val optimizedProgram = semanticAnalyzer.getOptimizedProgram()
-        println("\n" + "=".repeat(30) + "Optimized AST" + "=".repeat(30))
-        AstPrinter.print(optimizedProgram)
+        AstPrinter.print(optimizedProgram, "Optimized AST")
     } catch (e: SematicException) {
         println("\nSemantic Error: ${e.message}")
         exitProcess(1)

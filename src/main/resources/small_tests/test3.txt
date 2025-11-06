@@ -1,0 +1,14 @@
+class Math is
+  method FoldAll() : Integer is
+    var a : Integer((5).Plus(3).Mult(2))
+    var r : Real((2.5).Plus(0.5).Mult(4.0))
+    var b1 : Bool((5).Greater(3))
+    var b2 : Bool((5).Greater(3).And((2).Less(1)))
+    return (5).Plus(3).Mult(2)
+  end
+end
+
+class Program is
+  var m : Math()
+  var x : Integer(m.FoldAll())
+end

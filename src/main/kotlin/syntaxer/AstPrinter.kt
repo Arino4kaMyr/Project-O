@@ -1,12 +1,12 @@
 package syntaxer
 
 object AstPrinter {
-    fun print(program: Program) {
-        println("\n" + "=".repeat(30) + "AST" + "=".repeat(30))
+    fun print(program: Program, name: String) {
+        println("\n" + "=".repeat(30) + name + "=".repeat(30))
         program.classes.forEachIndexed { index, classDecl ->
             printClass(classDecl, "", index == program.classes.size - 1)
         }
-        println("=".repeat(63) + "\n")
+        println("=".repeat(60+name.length) + "\n")
     }
 
     private fun printClass(classDecl: ClassDecl, indent: String, isLast: Boolean) {

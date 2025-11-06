@@ -19,7 +19,7 @@ class SyntaxAnalyzer(
         }
         val program = Program(listOfClasses)
 
-        AstPrinter.print(program)
+        AstPrinter.print(program, "AST")
         
         return program
     }

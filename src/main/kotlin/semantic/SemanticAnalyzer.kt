@@ -10,7 +10,9 @@ class SemanticAnalyzer(private var program: Program) {
     /**
      * Получить оптимизированный AST
      */
-    fun getOptimizedProgram(): Program = program
+    fun getOptimizedProgram(): Program {
+        return program
+    }
 
     fun analyze() {
         // Этап 1: Создаем все классы
@@ -775,6 +777,7 @@ class SemanticAnalyzer(private var program: Program) {
      * Этап 7: Оптимизации AST
      * Оптимизация 1: Удаление недостижимого кода (после return)
      * Оптимизация 2: Упрощение константных выражений (5.Plus(3) → 8)
+     * Оптимизация 3: Удаление неиспользуемых переменных
      */
     private fun optimize() {
         // Создаем оптимизированную версию программы
@@ -818,7 +821,9 @@ class SemanticAnalyzer(private var program: Program) {
                 // Оптимизируем statements
                 val optimizedStmts = optimizeStatements(body.stmts, symbolTable, classSymbol, className, methodName)
 
-                MethodBody.BlockBody(body.vars, optimizedStmts)
+                val optimizedBody = MethodBody.BlockBody(body.vars, optimizedStmts)
+
+                removeUnusedVariables(optimizedBody)
             }
         }
     }
@@ -985,6 +990,82 @@ class SemanticAnalyzer(private var program: Program) {
                 }
             }
             else -> null
+        }
+    }
+
+    /**
+     * Оптимизация: Удаление неиспользуемых переменных (Dead Variable Elimination) на уровне метода
+     */
+    private fun removeUnusedVariables(body: MethodBody): MethodBody {
+        return when (body) {
+            is MethodBody.BlockBody -> {
+                // Собираем все используемые переменные
+                val usedVariables = mutableSetOf<String>()
+                collectUsedVariables(body.stmts, usedVariables)
+
+                // Фильтруем переменные: оставляем только используемые
+                val filteredVars = body.vars.filter { varDecl ->
+                    usedVariables.contains(varDecl.name)
+                }
+
+                MethodBody.BlockBody(filteredVars, body.stmts)
+            }
+        }
+    }
+
+    /**
+     * Собрать все используемые переменные в statements
+     */
+    private fun collectUsedVariables(stmts: List<Stmt>, usedVariables: MutableSet<String>) {
+        stmts.forEach { stmt ->
+            when (stmt) {
+                is Stmt.Assignment -> {
+                    usedVariables.add(stmt.target)
+                    collectUsedVariablesInExpr(stmt.expr, usedVariables)
+                }
+                is Stmt.Return -> {
+                    stmt.expr?.let { collectUsedVariablesInExpr(it, usedVariables) }
+                }
+                is Stmt.While -> {
+                    collectUsedVariablesInExpr(stmt.cond, usedVariables)
+                    when (stmt.body) {
+                        is MethodBody.BlockBody -> collectUsedVariables(stmt.body.stmts, usedVariables)
+                    }
+                }
+                is Stmt.If -> {
+                    collectUsedVariablesInExpr(stmt.cond, usedVariables)
+                    when (stmt.thenBody) {
+                        is MethodBody.BlockBody -> collectUsedVariables(stmt.thenBody.stmts, usedVariables)
+                    }
+                    stmt.elseBody?.let { elseBody ->
+                        when (elseBody) {
+                            is MethodBody.BlockBody -> collectUsedVariables(elseBody.stmts, usedVariables)
+                        }
+                    }
+                }
+                is Stmt.ExprStmt -> {
+                    collectUsedVariablesInExpr(stmt.expr, usedVariables)
+                }
+            }
+        }
+    }
+
+    /**
+     * Собрать используемые переменные в выражении
+     */
+    private fun collectUsedVariablesInExpr(expr: Expr, usedVariables: MutableSet<String>) {
+        when (expr) {
+            is Expr.Identifier -> {
+                usedVariables.add(expr.name)
+            }
+            is Expr.Call -> {
+                expr.receiver?.let { collectUsedVariablesInExpr(it, usedVariables) }
+                expr.args.forEach { collectUsedVariablesInExpr(it, usedVariables) }
+            }
+            is Expr.FieldAccess -> {
+                collectUsedVariablesInExpr(expr.receiver, usedVariables)
+            }
+            else -> {}
         }
     }
 }

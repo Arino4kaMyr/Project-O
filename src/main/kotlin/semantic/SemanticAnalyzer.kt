@@ -1,5 +1,6 @@
 package semantic
 
+import exceptions.SematicException
 import semantic.tables.ClassTable
 import syntaxer.*
 
@@ -10,7 +11,7 @@ class SemanticAnalyzer(private var program: Program) {
      * Получить оптимизированный AST
      */
     fun getOptimizedProgram(): Program = program
-    
+
     fun analyze() {
         // Этап 1: Создаем все классы
         program.classes.forEach { classDecl ->
@@ -18,30 +19,33 @@ class SemanticAnalyzer(private var program: Program) {
             val classSymbol = ClassSymbol(className, classDecl)
             classTable.addClass(classSymbol)
         }
-        
+
+        // Проверка, что существует класс Program
+        if (!classTable.contains("Program")) throw SematicException("Program class doesn't exist")
+
         // Этап 2: Разрешение наследования
         resolveInheritance()
-        
+
         // Этап 3: Заполняем таблицы символов каждого класса
         program.classes.forEach { classDecl ->
             val className = (classDecl.name as ClassName.Simple).name
             val classSymbol = classTable.findClass(className)!!
             analyzeClass(classDecl, classSymbol)
         }
-        
+
         // Этап 4: Проверка на дублирование
         checkDuplicates()
-        
+
         // Этап 5: Разрешение ссылок (Name Resolution)
         resolveReferences()
-        
+
         // Этап 6: Проверка типов (Type Checking)
         typeCheck()
-        
+
         // Этап 7: Оптимизации AST
         optimize()
     }
-    
+
     /**
      * Этап 2: Разрешение наследования
      * - Связывает parentClass в ClassSymbol
@@ -52,7 +56,7 @@ class SemanticAnalyzer(private var program: Program) {
         program.classes.forEach { classDecl ->
             val className = (classDecl.name as ClassName.Simple).name
             val classSymbol = classTable.findClass(className)!!
-            
+
             // Если у класса есть родитель
             classDecl.parent?.let { parentName ->
                 when (parentName) {
@@ -63,28 +67,28 @@ class SemanticAnalyzer(private var program: Program) {
                                 "Class '${className}' cannot extend itself"
                             )
                         }
-                        
+
                         val parentClass = classTable.findClass(parentName.name)
-                        
+
                         // Проверка существования родительского класса
                         if (parentClass == null) {
                             throw exceptions.SematicException(
                                 "Class '${className}' extends unknown class '${parentName.name}'"
                             )
                         }
-                        
+
                         // Связываем родительский класс
                         classSymbol.parentClass = parentClass
                     }
                 }
             }
         }
-        
+
         // Проверка циклов наследования
         program.classes.forEach { classDecl ->
             val className = (classDecl.name as ClassName.Simple).name
             val classSymbol = classTable.findClass(className)!!
-            
+
             if (classSymbol.hasInheritanceCycle()) {
                 throw exceptions.SematicException(
                     "Inheritance cycle detected in class '${className}'"
@@ -103,7 +107,7 @@ class SemanticAnalyzer(private var program: Program) {
                             "Duplicate field '${member.name}' in class '${classSymbol.name}'"
                         )
                     }
-                    
+
                     // Поле класса - добавляем в таблицу полей класса
                     val varType = extractTypeFromInit(member.init)
                     val fieldSymbol = VarSymbol(member.name, varType)
@@ -118,20 +122,20 @@ class SemanticAnalyzer(private var program: Program) {
                             "Duplicate parameter '${duplicateParams.keys.first()}' in method '${member.name}' of class '${classSymbol.name}'"
                         )
                     }
-                    
+
                     // Создаем символ метода
                     val paramSymbols = member.params.map { param ->
                         ParamSymbol(param.name, param.type)
                     }
                     val paramTypes = paramSymbols.map { it.type }
-                    
+
                     // Проверка на дублирование сигнатуры метода (имя + типы параметров)
                     if (classSymbol.hasMethodWithSignature(member.name, paramTypes)) {
                         throw exceptions.SematicException(
                             "Method '${member.name}' with signature (${paramTypes.joinToString(", ") { classNameToString(it) }}) already exists in class '${classSymbol.name}'"
                         )
                     }
-                    
+
                     val methodSymbol = MethodSymbol(
                         member.name,
                         paramSymbols,
@@ -139,17 +143,17 @@ class SemanticAnalyzer(private var program: Program) {
                         member
                     )
                     methodSymbol.ownerClass = classSymbol
-                    
+
                     // Добавляем параметры в таблицу символов метода
                     paramSymbols.forEach { param ->
                         methodSymbol.symbolTable.addParam(param)
                     }
-                    
+
                     // Анализируем тело метода и собираем локальные переменные
                     member.body?.let { body ->
                         analyzeMethodBody(body, methodSymbol.symbolTable, classSymbol.name, member.name)
                     }
-                    
+
                     // Добавляем метод в таблицу методов класса (поддержка перегрузки)
                     if (!classSymbol.methods.containsKey(member.name)) {
                         classSymbol.methods[member.name] = mutableListOf()
@@ -165,7 +169,7 @@ class SemanticAnalyzer(private var program: Program) {
     }
 
     private fun analyzeMethodBody(
-        body: MethodBody, 
+        body: MethodBody,
         symbolTable: semantic.tables.MethodTable,
         className: String = "",
         methodName: String = ""
@@ -185,7 +189,7 @@ class SemanticAnalyzer(private var program: Program) {
                             "Duplicate local variable '${varDecl.name}'$location"
                         )
                     }
-                    
+
                     val varType = extractTypeFromInit(varDecl.init)
                     symbolTable.addLocalVariable(varDecl.name, varType)
                 }
@@ -210,7 +214,7 @@ class SemanticAnalyzer(private var program: Program) {
             }
         }
     }
-    
+
     /**
      * Этап 4: Проверка на дублирование
      * - Проверяет дублирование полей в классе (уже проверяется при добавлении)
@@ -222,7 +226,7 @@ class SemanticAnalyzer(private var program: Program) {
         // Все проверки выполняются при добавлении символов
         // Этот метод оставлен для возможных дополнительных проверок в будущем
     }
-    
+
     /**
      * Этап 5: Разрешение ссылок (Name Resolution)
      * - Проверяет, что все используемые переменные объявлены
@@ -233,7 +237,7 @@ class SemanticAnalyzer(private var program: Program) {
         program.classes.forEach { classDecl ->
             val className = (classDecl.name as ClassName.Simple).name
             val classSymbol = classTable.findClass(className)!!
-            
+
             classDecl.members.forEach { member ->
                 when (member) {
                     is MemberDecl.MethodDecl -> {
@@ -246,7 +250,7 @@ class SemanticAnalyzer(private var program: Program) {
                                     classNameEquals(type1, type2)
                                 }
                             }
-                            
+
                             if (methodSymbol != null) {
                                 resolveMethodBody(body, methodSymbol.symbolTable, classSymbol, className, member.name)
                             }
@@ -260,7 +264,7 @@ class SemanticAnalyzer(private var program: Program) {
             }
         }
     }
-    
+
     /**
      * Разрешение ссылок в теле метода
      */
@@ -280,7 +284,7 @@ class SemanticAnalyzer(private var program: Program) {
             }
         }
     }
-    
+
     /**
      * Разрешение ссылок в statement
      */
@@ -319,7 +323,7 @@ class SemanticAnalyzer(private var program: Program) {
             }
         }
     }
-    
+
     /**
      * Разрешение ссылок в выражении
      */
@@ -340,7 +344,7 @@ class SemanticAnalyzer(private var program: Program) {
                 expr.receiver?.let { receiver ->
                     resolveExpr(receiver, symbolTable, classSymbol, className, methodName)
                 }
-                
+
                 // Проверяем вызов метода
                 if (expr.receiver == null) {
                     // Вызов метода без receiver - проверяем, что метод существует в классе
@@ -352,7 +356,7 @@ class SemanticAnalyzer(private var program: Program) {
                     }
                 }
                 // Если receiver есть, проверка метода будет на этапе проверки типов
-                
+
                 // Проверяем аргументы
                 expr.args.forEach { arg ->
                     resolveExpr(arg, symbolTable, classSymbol, className, methodName)
@@ -374,7 +378,7 @@ class SemanticAnalyzer(private var program: Program) {
             }
         }
     }
-    
+
     /**
      * Проверка, что переменная объявлена
      */
@@ -389,12 +393,12 @@ class SemanticAnalyzer(private var program: Program) {
         if (symbolTable.contains(varName)) {
             return
         }
-        
+
         // Затем ищем в полях класса (с учетом наследования)
         if (classSymbol.findField(varName) != null) {
             return
         }
-        
+
         // Переменная не найдена
         throw exceptions.SematicException(
             "Unknown variable '${varName}' in method '${methodName}' of class '${className}'"
@@ -412,7 +416,7 @@ class SemanticAnalyzer(private var program: Program) {
         program.classes.forEach { classDecl ->
             val className = (classDecl.name as ClassName.Simple).name
             val classSymbol = classTable.findClass(className)!!
-            
+
             classDecl.members.forEach { member ->
                 when (member) {
                     is MemberDecl.MethodDecl -> {
@@ -425,7 +429,7 @@ class SemanticAnalyzer(private var program: Program) {
                                     classNameEquals(type1, type2)
                                 }
                             }
-                            
+
                             if (methodSymbol != null) {
                                 typeCheckMethodBody(body, methodSymbol.symbolTable, classSymbol, className, methodSymbol)
                             }
@@ -436,7 +440,7 @@ class SemanticAnalyzer(private var program: Program) {
             }
         }
     }
-    
+
     /**
      * Проверка типов в теле метода
      */
@@ -455,7 +459,7 @@ class SemanticAnalyzer(private var program: Program) {
             }
         }
     }
-    
+
     /**
      * Проверка типов в statement
      */
@@ -472,7 +476,7 @@ class SemanticAnalyzer(private var program: Program) {
                 val targetType = getVariableType(stmt.target, symbolTable, classSymbol, className, methodSymbol.name)
                 // Получаем тип выражения
                 val exprType = getTypeOfExpr(stmt.expr, symbolTable, classSymbol, className, methodSymbol.name)
-                
+
                 // Проверяем совместимость типов
                 if (!isAssignable(exprType, targetType, classTable)) {
                     throw exceptions.SematicException(
@@ -496,7 +500,7 @@ class SemanticAnalyzer(private var program: Program) {
                 stmt.expr?.let { expr ->
                     val exprType = getTypeOfExpr(expr, symbolTable, classSymbol, className, methodSymbol.name)
                     val returnType = methodSymbol.returnType
-                    
+
                     if (returnType != null) {
                         if (!isAssignable(exprType, returnType, classTable)) {
                             throw exceptions.SematicException(
@@ -518,7 +522,7 @@ class SemanticAnalyzer(private var program: Program) {
             }
         }
     }
-    
+
     /**
      * Определение типа выражения
      */
@@ -544,46 +548,46 @@ class SemanticAnalyzer(private var program: Program) {
                 val argTypes = expr.args.map { arg ->
                     getTypeOfExpr(arg, symbolTable, classSymbol, className, methodName)
                 }
-                
+
                 if (expr.receiver == null) {
                     // Вызов метода без receiver - разрешение перегрузки
                     val method = resolveMethodCall(classSymbol, expr.method, argTypes, className)
-                    
+
                     method.returnType ?: ClassName.Simple("void")
                 } else {
                     // Вызов метода с receiver
                     val receiverType = getTypeOfExpr(expr.receiver, symbolTable, classSymbol, className, methodName)
                     val receiverClass = classTable.getClass(receiverType)
-                    
+
                     if (receiverClass == null) {
                         // Встроенный тип (Array, Integer, etc.) - пропускаем проверку методов
                         // Возвращаем Unknown, так как не можем определить тип
                         return ClassName.Simple("Unknown")
                     }
-                    
+
                     // Разрешение перегрузки для метода с receiver
                     val method = resolveMethodCall(receiverClass, expr.method, argTypes, receiverClass.name)
-                    
+
                     method.returnType ?: ClassName.Simple("void")
                 }
             }
             is Expr.FieldAccess -> {
                 val receiverType = getTypeOfExpr(expr.receiver, symbolTable, classSymbol, className, methodName)
                 val receiverClass = classTable.getClass(receiverType)
-                
+
                 if (receiverClass == null) {
                     // Встроенный тип (Array, Integer, etc.) - пропускаем проверку полей
                     // Возвращаем Unknown, так как не можем определить тип
                     return ClassName.Simple("Unknown")
                 }
-                
+
                 val field = receiverClass.findField(expr.name)
                 if (field == null) {
                     throw exceptions.SematicException(
                         "Field '${expr.name}' not found in class '${receiverClass.name}'"
                     )
                 }
-                
+
                 field.type
             }
             is Expr.ClassNameExpr -> {
@@ -591,7 +595,7 @@ class SemanticAnalyzer(private var program: Program) {
             }
         }
     }
-    
+
     /**
      * Получить тип переменной
      */
@@ -607,18 +611,18 @@ class SemanticAnalyzer(private var program: Program) {
         if (localVar != null) {
             return localVar.type
         }
-        
+
         // Затем ищем в полях класса
         val field = classSymbol.findField(varName)
         if (field != null) {
             return field.type
         }
-        
+
         throw exceptions.SematicException(
             "Variable '${varName}' not found in method '${methodName}' of class '${className}'"
         )
     }
-    
+
     /**
      * Проверка совместимости типов (можно ли присвоить fromType к toType)
      */
@@ -627,7 +631,7 @@ class SemanticAnalyzer(private var program: Program) {
         if (classNameEquals(fromType, toType)) {
             return true
         }
-        
+
         // Unknown тип (для встроенных типов) - разрешаем присваивание
         when (fromType) {
             is ClassName.Simple -> {
@@ -636,7 +640,7 @@ class SemanticAnalyzer(private var program: Program) {
                 }
             }
         }
-        
+
         when (toType) {
             is ClassName.Simple -> {
                 if (toType.name == "Unknown") {
@@ -644,7 +648,7 @@ class SemanticAnalyzer(private var program: Program) {
                 }
             }
         }
-        
+
         // Проверка наследования (fromType является подтипом toType)
         when (fromType) {
             is ClassName.Simple -> {
@@ -659,10 +663,10 @@ class SemanticAnalyzer(private var program: Program) {
                 }
             }
         }
-        
+
         return false
     }
-    
+
     /**
      * Сравнение имен классов
      */
@@ -672,7 +676,7 @@ class SemanticAnalyzer(private var program: Program) {
             else -> false
         }
     }
-    
+
     /**
      * Разрешение вызова метода (Method Resolution)
      * Выбирает правильный метод из перегруженных на основе типов аргументов
@@ -685,16 +689,16 @@ class SemanticAnalyzer(private var program: Program) {
     ): MethodSymbol {
         // Получаем все методы с данным именем
         val candidates = classSymbol.findMethods(methodName)
-        
+
         if (candidates.isEmpty()) {
             throw exceptions.SematicException(
                 "Method '${methodName}' not found in class '${context}'"
             )
         }
-        
+
         // Фильтруем методы по количеству параметров
         val matchingCount = candidates.filter { it.params.size == argTypes.size }
-        
+
         if (matchingCount.isEmpty()) {
             val paramCounts = candidates.map { it.params.size }.distinct().sorted()
             throw exceptions.SematicException(
@@ -702,7 +706,7 @@ class SemanticAnalyzer(private var program: Program) {
                 "Available overloads have ${paramCounts.joinToString(", ")} ${if (paramCounts.size == 1) "argument" else "arguments"}"
             )
         }
-        
+
         // Ищем точное совпадение типов
         val exactMatch = matchingCount.find { method ->
             method.params.size == argTypes.size &&
@@ -713,14 +717,14 @@ class SemanticAnalyzer(private var program: Program) {
         if (exactMatch != null) {
             return exactMatch
         }
-        
+
         // Ищем совместимые методы (где аргументы можно присвоить параметрам)
         val compatibleMethods = matchingCount.filter { method ->
             method.params.mapIndexed { index, param ->
                 isAssignable(argTypes[index], param.type, classTable)
             }.all { it }
         }
-        
+
         if (compatibleMethods.isEmpty()) {
             val expectedTypes = matchingCount.map { method ->
                 method.params.joinToString(", ") { classNameToString(it.type) }
@@ -730,7 +734,7 @@ class SemanticAnalyzer(private var program: Program) {
                 "Expected: ${expectedTypes.joinToString(" or ")}"
             )
         }
-        
+
         if (compatibleMethods.size > 1) {
             // Амбигуация - несколько методов подходят
             val signatures = compatibleMethods.map { method ->
@@ -741,10 +745,10 @@ class SemanticAnalyzer(private var program: Program) {
                 "Candidates: ${signatures.joinToString("; ")}"
             )
         }
-        
+
         return compatibleMethods.first()
     }
-    
+
     /**
      * Преобразование ClassName в строку
      */
@@ -766,7 +770,7 @@ class SemanticAnalyzer(private var program: Program) {
             else -> ClassName.Simple("Unknown")
         }
     }
-    
+
     /**
      * Этап 7: Оптимизации AST
      * Оптимизация 1: Удаление недостижимого кода (после return)
@@ -777,7 +781,7 @@ class SemanticAnalyzer(private var program: Program) {
         val optimizedClasses = program.classes.map { classDecl ->
             val className = (classDecl.name as ClassName.Simple).name
             val classSymbol = classTable.findClass(className)!!
-            
+
             val optimizedMembers = classDecl.members.map { member ->
                 when (member) {
                     is MemberDecl.MethodDecl -> {
@@ -794,14 +798,14 @@ class SemanticAnalyzer(private var program: Program) {
                     else -> member
                 }
             }
-            
+
             ClassDecl(classDecl.name, classDecl.parent, optimizedMembers)
         }
-        
+
         // Заменяем программу оптимизированной версией
         program = Program(optimizedClasses)
     }
-    
+
     private fun optimizeMethodBody(
         body: MethodBody,
         symbolTable: semantic.tables.MethodTable,
@@ -813,12 +817,12 @@ class SemanticAnalyzer(private var program: Program) {
             is MethodBody.BlockBody -> {
                 // Оптимизируем statements
                 val optimizedStmts = optimizeStatements(body.stmts, symbolTable, classSymbol, className, methodName)
-                
+
                 MethodBody.BlockBody(body.vars, optimizedStmts)
             }
         }
     }
-    
+
     private fun optimizeStatements(
         stmts: List<Stmt>,
         symbolTable: semantic.tables.MethodTable,
@@ -828,13 +832,13 @@ class SemanticAnalyzer(private var program: Program) {
     ): List<Stmt> {
         val optimizedStmts = mutableListOf<Stmt>()
         var foundReturn = false
-        
+
         stmts.forEach { stmt ->
             // Оптимизация 1: Удаление недостижимого кода (после return)
             if (foundReturn) {
                 return@forEach
             }
-            
+
             val optimized: Stmt? = when (stmt) {
                 is Stmt.Return -> {
                     foundReturn = true
@@ -869,15 +873,15 @@ class SemanticAnalyzer(private var program: Program) {
                     Stmt.ExprStmt(optimizedExpr)
                 }
             }
-            
+
             if (optimized != null) {
                 optimizedStmts.add(optimized)
             }
         }
-        
+
         return optimizedStmts
     }
-    
+
     /**
      * Оптимизация 2: Упрощение константных выражений
      * Упрощает вызовы методов на константах, например:
@@ -897,7 +901,7 @@ class SemanticAnalyzer(private var program: Program) {
                 // Упрощаем аргументы
                 val optimizedArgs = expr.args.map { simplifyConstantExpression(it) }
                 val optimizedReceiver = expr.receiver?.let { simplifyConstantExpression(it) }
-                
+
                 // Если receiver и аргументы - константы, пытаемся упростить
                 if (optimizedReceiver != null && optimizedArgs.isNotEmpty()) {
                     val simplified = simplifyConstantMethodCall(optimizedReceiver, expr.method, optimizedArgs)
@@ -905,7 +909,7 @@ class SemanticAnalyzer(private var program: Program) {
                         return simplified
                     }
                 }
-                
+
                 Expr.Call(optimizedReceiver, expr.method, optimizedArgs)
             }
             is Expr.FieldAccess -> {
@@ -916,7 +920,7 @@ class SemanticAnalyzer(private var program: Program) {
             }
         }
     }
-    
+
     /**
      * Упрощение вызова метода на константах
      * Возвращает упрощенное выражение, если возможно, иначе null
@@ -931,7 +935,7 @@ class SemanticAnalyzer(private var program: Program) {
             receiver is Expr.IntLit && args.size == 1 && args[0] is Expr.IntLit -> {
                 val left = receiver.v
                 val right = (args[0] as Expr.IntLit).v
-                
+
                 when (methodName) {
                     // Арифметические операции
                     "Plus" -> Expr.IntLit(left + right)
@@ -952,7 +956,7 @@ class SemanticAnalyzer(private var program: Program) {
             receiver is Expr.RealLit && args.size == 1 && args[0] is Expr.RealLit -> {
                 val left = receiver.v
                 val right = (args[0] as Expr.RealLit).v
-                
+
                 when (methodName) {
                     // Арифметические операции
                     "Plus" -> Expr.RealLit(left + right)
@@ -973,7 +977,7 @@ class SemanticAnalyzer(private var program: Program) {
             receiver is Expr.BoolLit && args.size == 1 && args[0] is Expr.BoolLit -> {
                 val left = receiver.v
                 val right = (args[0] as Expr.BoolLit).v
-                
+
                 when (methodName) {
                     "And" -> Expr.BoolLit(left && right)
                     "Or" -> Expr.BoolLit(left || right)

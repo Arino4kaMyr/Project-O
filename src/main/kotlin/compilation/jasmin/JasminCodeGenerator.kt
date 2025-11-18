@@ -23,7 +23,7 @@ class JasminCodeGenerator(
     }
 
     private fun generateClass(classDecl: ClassDecl): String {
-        var sb = StringBuilder()
+        val sb = StringBuilder()
         val className = (classDecl.name as ClassName.Simple).name
 
         sb.append(".class public $className\n")
@@ -33,12 +33,13 @@ class JasminCodeGenerator(
         }
         sb.append(".super $superName\n")
 
-        sb = generateField(classDecl, sb)
+        generateField(classDecl, sb)
+
 
         return sb.toString()
     }
 
-    private fun generateField(classDecl: ClassDecl, sb: StringBuilder): StringBuilder {
+    private fun generateField(classDecl: ClassDecl, sb: StringBuilder) {
 
         val className = (classDecl.name as ClassName.Simple).name
         val classSymbol = classTable.findClass(className)
@@ -53,21 +54,6 @@ class JasminCodeGenerator(
 
         if (classSymbol.fields.isNotEmpty()) {
             sb.append("\n")
-        }
-        return sb
-    }
-
-
-
-    private fun toJasminType(type: ClassName): String {
-        return when (type) {
-            is ClassName.Simple -> when (type.name) {
-                "Integer", "Int" -> "I"      // int
-                "Real", "Double" -> "D"      // double
-                "Bool", "Boolean" -> "Z"     // boolean
-                "void", "Void" -> "V"        // void (для returnType, не для полей)
-                else -> "L${type.name};"     // объектный тип: LProgram; LArray;
-            }
         }
     }
 

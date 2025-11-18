@@ -1,3 +1,4 @@
+import compilation.Compiler
 import compilation.jasmin.JasminCodeGenerator
 import constants.MainConstants
 import exceptions.SematicException
@@ -10,7 +11,7 @@ import kotlin.system.exitProcess
 
 fun main() {
     val lexer = Lexer()
-    
+
     val resourceStream = object{}.javaClass.getResourceAsStream(MainConstants.TEST_FILE)
         ?: error("File ${MainConstants.TEST_FILE} doesn't exist")
 
@@ -44,7 +45,13 @@ fun main() {
         val optimizedProgram = semanticAnalyzer.getOptimizedProgram()
         AstPrinter.print(optimizedProgram, "Optimized AST")
 
+
+        val compiler = Compiler(optimizedProgram, classTable)
+        // run the program(transfer to jasmin files and execute them)
+//        compiler.compile()
         val jasminCodeGenerator = JasminCodeGenerator(optimizedProgram, classTable)
+        // print all jasmin files without content
+        println(jasminCodeGenerator.generate().keys.toString())
 
     } catch (e: SematicException) {
         println("\nSemantic Error: ${e.message}")

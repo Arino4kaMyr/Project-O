@@ -1,3 +1,4 @@
+import compilation.jasmin.JasminCodeGenerator
 import constants.MainConstants
 import exceptions.SematicException
 import lexer.Lexer
@@ -36,11 +37,15 @@ fun main() {
         semanticAnalyzer.analyze()
         
         // Выводим таблицы классов (с полями и методами)
-        semanticAnalyzer.classTable.print()
+        val classTable = semanticAnalyzer.classTable
+        classTable.print()
         
         // Выводим оптимизированный AST
         val optimizedProgram = semanticAnalyzer.getOptimizedProgram()
         AstPrinter.print(optimizedProgram, "Optimized AST")
+
+        val jasminCodeGenerator = JasminCodeGenerator(optimizedProgram, classTable)
+
     } catch (e: SematicException) {
         println("\nSemantic Error: ${e.message}")
         exitProcess(1)

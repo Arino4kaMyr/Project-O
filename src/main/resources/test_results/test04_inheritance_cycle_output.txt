@@ -1,0 +1,35 @@
+class : KEYWORD
+A : IDENTIFIER
+extends : KEYWORD
+B : IDENTIFIER
+is : KEYWORD
+end : KEYWORD
+class : KEYWORD
+B : IDENTIFIER
+extends : KEYWORD
+C : IDENTIFIER
+is : KEYWORD
+end : KEYWORD
+class : KEYWORD
+C : IDENTIFIER
+extends : KEYWORD
+A : IDENTIFIER
+is : KEYWORD
+end : KEYWORD
+class : KEYWORD
+Program : IDENTIFIER
+is : KEYWORD
+end : KEYWORD
+
+==============================AST==============================
+├──  Class: A
+│    extends B
+├──  Class: B
+│    extends C
+├──  Class: C
+│    extends A
+└──  Class: Program
+===============================================================
+
+
+Semantic Error: Inheritance cycle detected in class 'A'

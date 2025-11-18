@@ -1,0 +1,15 @@
+# Test 14: Оптимизация недостижимого кода
+
+class Test is
+  method foo() : Integer is
+    var y : Integer(1)
+    return (5).Plus(3)
+    y := 2
+    var z : Integer(10)
+  end
+end
+
+class Program is
+  var t : Test()
+end
+

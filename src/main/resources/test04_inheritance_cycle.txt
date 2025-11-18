@@ -1,0 +1,15 @@
+# Test 04: Цикл наследования (ошибка)
+#Semantic Error - Inheritance cycle detected
+
+class A extends B is
+end
+
+class B extends C is
+end
+
+class C extends A is
+end
+
+class Program is
+end
+

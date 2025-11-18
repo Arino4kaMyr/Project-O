@@ -1,0 +1,16 @@
+# Test 06: Перегрузка методов
+
+class Calculator is
+  method add(x: Integer) : Integer is
+    return x
+  end
+  
+  method add(x: Integer, y: Integer) : Integer is
+    return x.Plus(y)
+  end
+end
+
+class Program is
+  var calc : Calculator()
+end
+

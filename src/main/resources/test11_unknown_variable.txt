@@ -1,0 +1,12 @@
+# Test 11: Неизвестная переменная (ошибка)
+#Semantic Error - Unknown variable
+
+class Test is
+  method foo() is
+    x := 5
+  end
+end
+
+class Program is
+end
+

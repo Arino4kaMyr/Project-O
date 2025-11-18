@@ -1,0 +1,90 @@
+class : KEYWORD
+Test : IDENTIFIER
+is : KEYWORD
+method : KEYWORD
+foo : IDENTIFIER
+( : SPECIAL_SYMBOL
+) : SPECIAL_SYMBOL
+: : SPECIAL_SYMBOL
+Integer : IDENTIFIER
+is : KEYWORD
+var : KEYWORD
+y : IDENTIFIER
+: : SPECIAL_SYMBOL
+Integer : IDENTIFIER
+( : SPECIAL_SYMBOL
+1 : NUMBER
+) : SPECIAL_SYMBOL
+return : KEYWORD
+( : SPECIAL_SYMBOL
+5 : NUMBER
+) : SPECIAL_SYMBOL
+. : SPECIAL_SYMBOL
+Plus : IDENTIFIER
+( : SPECIAL_SYMBOL
+3 : NUMBER
+) : SPECIAL_SYMBOL
+y : IDENTIFIER
+:= : SPECIAL_SYMBOL
+2 : NUMBER
+var : KEYWORD
+z : IDENTIFIER
+: : SPECIAL_SYMBOL
+Integer : IDENTIFIER
+( : SPECIAL_SYMBOL
+10 : NUMBER
+) : SPECIAL_SYMBOL
+end : KEYWORD
+end : KEYWORD
+class : KEYWORD
+Program : IDENTIFIER
+is : KEYWORD
+var : KEYWORD
+t : IDENTIFIER
+: : SPECIAL_SYMBOL
+Test : IDENTIFIER
+( : SPECIAL_SYMBOL
+) : SPECIAL_SYMBOL
+end : KEYWORD
+
+==============================AST==============================
+├──  Class: Test
+│   └──  Method: foo() : Integer
+│       ├──  Local Var: y : Integer
+│       ├──  Local Var: z : Integer
+│       ├──  Return: 5.Plus(3)
+│       └──  Assignment: y := 2
+└──  Class: Program
+    └──  Field: t : Test
+===============================================================
+
+
+========== Class Table ==========
+Class: Test
+  Parent: none
+  Fields:
+    (no fields)
+  Methods:
+    foo() : Integer
+      Symbol Table:
+      y : Integer
+      z : Integer
+
+Class: Program
+  Parent: none
+  Fields:
+    t : Test
+  Methods:
+    (no methods)
+
+=================================
+
+
+==============================Optimized AST==============================
+├──  Class: Test
+│   └──  Method: foo() : Integer
+│       └──  Return: 8
+└──  Class: Program
+    └──  Field: t : Test
+=========================================================================
+

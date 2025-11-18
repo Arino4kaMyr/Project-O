@@ -283,6 +283,66 @@ class SyntaxAnalyzer(
             return Stmt.If(cond, thenBody, elseBody)
         }
 
+        // Обработка присваивания с использованием this: this.field := expr
+        // или выражения с this: this.field, this.method() и т.д.
+        if (ts.matchTokenType(TokenType.KEYWORD) && ts.peek().text == THIS) {
+            ts.next() // пропускаем 'this'
+            
+            // Если после this идет точка, значит это доступ к полю или методу
+            if (ts.peek().text == ".") {
+                ts.next() // пропускаем '.'
+                val fieldTok = ts.expect(TokenType.IDENTIFIER)
+                val fieldName = fieldTok.text
+                
+                // Проверяем, является ли это присваиванием: this.field := expr
+                if (ts.peek().text == ASSIGN) {
+                    ts.next() // пропускаем ':='
+                    val expr = parseExpr()
+                    return Stmt.Assignment("this.${fieldName}", expr)
+                } else {
+                    // Это выражение: this.field или this.field.method() и т.д.
+                    var expr: Expr = Expr.FieldAccess(Expr.This, fieldName)
+                    
+                    // Обрабатываем цепочку обращений: this.field1.field2.method()...
+                    while (ts.peek().text == ".") {
+                        ts.next() // пропускаем '.'
+                        val nameTok = ts.expect(TokenType.IDENTIFIER)
+                        val name = nameTok.text
+                        
+                        if (ts.peek().text == OPEN_BRACKET) {
+                            // Вызов метода: expr.method(args)
+                            val args = parseArgs()
+                            expr = Expr.Call(expr, name, args)
+                        } else {
+                            // Доступ к полю: expr.field
+                            expr = Expr.FieldAccess(expr, name)
+                        }
+                    }
+                    return Stmt.ExprStmt(expr)
+                }
+            } else {
+                // Просто this без точки - начинаем строить выражение
+                var expr: Expr = Expr.This
+                
+                // Обрабатываем цепочку после this: this.field, this.method() и т.д.
+                while (ts.peek().text == ".") {
+                    ts.next() // пропускаем '.'
+                    val nameTok = ts.expect(TokenType.IDENTIFIER)
+                    val name = nameTok.text
+                    
+                    if (ts.peek().text == OPEN_BRACKET) {
+                        // Вызов метода: this.method(args)
+                        val args = parseArgs()
+                        expr = Expr.Call(expr, name, args)
+                    } else {
+                        // Доступ к полю: this.field
+                        expr = Expr.FieldAccess(expr, name)
+                    }
+                }
+                return Stmt.ExprStmt(expr)
+            }
+        }
+        
         // Assignment: IDENTIFIER ':=' expr
         if (ts.matchTokenType(TokenType.IDENTIFIER)) {
             val idTok = ts.next()
@@ -371,6 +431,14 @@ class SyntaxAnalyzer(
                     ts.next()
                     return Expr.This
                 }
+                if (p.text == TRUE) {
+                    ts.next()
+                    return Expr.BoolLit(true)
+                }
+                if (p.text == FALSE) {
+                    ts.next()
+                    return Expr.BoolLit(false)
+                }
             }
             TokenType.SPECIAL_SYMBOL -> {
                 if (p.text == OPEN_BRACKET) {
@@ -382,8 +450,7 @@ class SyntaxAnalyzer(
                 }
             }
             else -> {
-                //TODO: If we have some parameters extra guess how to implement
-                // We need add TokenType.BOOLEAN in lexer
+                
             }
         }
         throw NotFoundException("Unknown primary expression: ${p.text} in line ${p.line}")
@@ -439,6 +506,8 @@ class SyntaxAnalyzer(
         private const val ELSE = "else"
         private const val RETURN = "return"
         private const val THIS = "this"
+        private const val TRUE = "true"
+        private const val FALSE = "false"
 
         // symbols
         private const val ASSIGN = ":="

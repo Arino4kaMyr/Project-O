@@ -1,0 +1,95 @@
+class : KEYWORD
+Calculator : IDENTIFIER
+is : KEYWORD
+method : KEYWORD
+add : IDENTIFIER
+( : SPECIAL_SYMBOL
+x : IDENTIFIER
+: : SPECIAL_SYMBOL
+Integer : IDENTIFIER
+) : SPECIAL_SYMBOL
+: : SPECIAL_SYMBOL
+Integer : IDENTIFIER
+is : KEYWORD
+return : KEYWORD
+x : IDENTIFIER
+end : KEYWORD
+method : KEYWORD
+add : IDENTIFIER
+( : SPECIAL_SYMBOL
+x : IDENTIFIER
+: : SPECIAL_SYMBOL
+Integer : IDENTIFIER
+, : SPECIAL_SYMBOL
+y : IDENTIFIER
+: : SPECIAL_SYMBOL
+Integer : IDENTIFIER
+) : SPECIAL_SYMBOL
+: : SPECIAL_SYMBOL
+Integer : IDENTIFIER
+is : KEYWORD
+return : KEYWORD
+x : IDENTIFIER
+. : SPECIAL_SYMBOL
+Plus : IDENTIFIER
+( : SPECIAL_SYMBOL
+y : IDENTIFIER
+) : SPECIAL_SYMBOL
+end : KEYWORD
+end : KEYWORD
+class : KEYWORD
+Program : IDENTIFIER
+is : KEYWORD
+var : KEYWORD
+calc : IDENTIFIER
+: : SPECIAL_SYMBOL
+Calculator : IDENTIFIER
+( : SPECIAL_SYMBOL
+) : SPECIAL_SYMBOL
+end : KEYWORD
+
+==============================AST==============================
+├──  Class: Calculator
+│   ├──  Method: add(x: Integer) : Integer
+│   │   └──  Return: x
+│   └──  Method: add(x: Integer, y: Integer) : Integer
+│       └──  Return: x.Plus(y)
+└──  Class: Program
+    └──  Field: calc : Calculator
+===============================================================
+
+
+========== Class Table ==========
+Class: Calculator
+  Parent: none
+  Fields:
+    (no fields)
+  Methods:
+    add(x: Integer) : Integer
+      Symbol Table:
+      x : Integer
+    add(x: Integer, y: Integer) : Integer
+      Symbol Table:
+      x : Integer
+      y : Integer
+
+Class: Program
+  Parent: none
+  Fields:
+    calc : Calculator
+  Methods:
+    (no methods)
+
+=================================
+
+
+==============================Optimized AST==============================
+├──  Class: Calculator
+│   ├──  Method: add(x: Integer) : Integer
+│   │   └──  Return: x
+│   └──  Method: add(x: Integer, y: Integer) : Integer
+│       └──  Return: x.Plus(y)
+└──  Class: Program
+    └──  Field: calc : Calculator
+=========================================================================
+

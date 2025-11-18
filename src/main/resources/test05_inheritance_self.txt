@@ -1,0 +1,9 @@
+# Test 05: Самонаследование (ошибка)
+#Semantic Error - Class cannot extend itself
+
+class A extends A is
+end
+
+class Program is
+end
+

@@ -1,0 +1,98 @@
+class : KEYWORD
+Point : IDENTIFIER
+is : KEYWORD
+var : KEYWORD
+x : IDENTIFIER
+: : SPECIAL_SYMBOL
+Integer : IDENTIFIER
+var : KEYWORD
+y : IDENTIFIER
+: : SPECIAL_SYMBOL
+Integer : IDENTIFIER
+method : KEYWORD
+getX : IDENTIFIER
+( : SPECIAL_SYMBOL
+) : SPECIAL_SYMBOL
+: : SPECIAL_SYMBOL
+Integer : IDENTIFIER
+is : KEYWORD
+return : KEYWORD
+this : KEYWORD
+. : SPECIAL_SYMBOL
+x : IDENTIFIER
+end : KEYWORD
+method : KEYWORD
+setX : IDENTIFIER
+( : SPECIAL_SYMBOL
+newX : IDENTIFIER
+: : SPECIAL_SYMBOL
+Integer : IDENTIFIER
+) : SPECIAL_SYMBOL
+is : KEYWORD
+this : KEYWORD
+. : SPECIAL_SYMBOL
+x : IDENTIFIER
+:= : SPECIAL_SYMBOL
+newX : IDENTIFIER
+end : KEYWORD
+end : KEYWORD
+class : KEYWORD
+Program : IDENTIFIER
+is : KEYWORD
+var : KEYWORD
+p : IDENTIFIER
+: : SPECIAL_SYMBOL
+Point : IDENTIFIER
+( : SPECIAL_SYMBOL
+) : SPECIAL_SYMBOL
+end : KEYWORD
+
+==============================AST==============================
+├──  Class: Point
+│   ├──  Field: x : Integer
+│   ├──  Field: y : Integer
+│   ├──  Method: getX() : Integer
+│   │   └──  Return: this.x
+│   └──  Method: setX(newX: Integer) : void
+│       └──  Assignment: this.x := newX
+└──  Class: Program
+    └──  Field: p : Point
+===============================================================
+
+
+========== Class Table ==========
+Class: Point
+  Parent: none
+  Fields:
+    x : Integer
+    y : Integer
+  Methods:
+    getX() : Integer
+      Symbol Table:
+      (no variables)
+    setX(newX: Integer) : void
+      Symbol Table:
+      newX : Integer
+
+Class: Program
+  Parent: none
+  Fields:
+    p : Point
+  Methods:
+    (no methods)
+
+=================================
+
+
+==============================Optimized AST==============================
+├──  Class: Point
+│   ├──  Field: x : Integer
+│   ├──  Field: y : Integer
+│   ├──  Method: getX() : Integer
+│   │   └──  Return: this.x
+│   └──  Method: setX(newX: Integer) : void
+│       └──  Assignment: this.x := newX
+└──  Class: Program
+    └──  Field: p : Point
+=========================================================================
+

@@ -1,0 +1,11 @@
+# Test 13: Дублирование поля (ошибка)
+#Semantic Error - Duplicate field
+
+class Test is
+  var x : Integer
+  var x : Real
+end
+
+class Program is
+end
+

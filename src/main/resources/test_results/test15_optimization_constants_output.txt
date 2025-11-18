@@ -1,0 +1,105 @@
+class : KEYWORD
+Math : IDENTIFIER
+is : KEYWORD
+method : KEYWORD
+compute : IDENTIFIER
+( : SPECIAL_SYMBOL
+) : SPECIAL_SYMBOL
+: : SPECIAL_SYMBOL
+Integer : IDENTIFIER
+is : KEYWORD
+var : KEYWORD
+a : IDENTIFIER
+: : SPECIAL_SYMBOL
+Integer : IDENTIFIER
+( : SPECIAL_SYMBOL
+( : SPECIAL_SYMBOL
+5 : NUMBER
+) : SPECIAL_SYMBOL
+. : SPECIAL_SYMBOL
+Plus : IDENTIFIER
+( : SPECIAL_SYMBOL
+3 : NUMBER
+) : SPECIAL_SYMBOL
+. : SPECIAL_SYMBOL
+Mult : IDENTIFIER
+( : SPECIAL_SYMBOL
+2 : NUMBER
+) : SPECIAL_SYMBOL
+) : SPECIAL_SYMBOL
+var : KEYWORD
+b : IDENTIFIER
+: : SPECIAL_SYMBOL
+Integer : IDENTIFIER
+( : SPECIAL_SYMBOL
+( : SPECIAL_SYMBOL
+10 : NUMBER
+) : SPECIAL_SYMBOL
+. : SPECIAL_SYMBOL
+Minus : IDENTIFIER
+( : SPECIAL_SYMBOL
+2 : NUMBER
+) : SPECIAL_SYMBOL
+) : SPECIAL_SYMBOL
+return : KEYWORD
+( : SPECIAL_SYMBOL
+2 : NUMBER
+) : SPECIAL_SYMBOL
+. : SPECIAL_SYMBOL
+Mult : IDENTIFIER
+( : SPECIAL_SYMBOL
+4 : NUMBER
+) : SPECIAL_SYMBOL
+end : KEYWORD
+end : KEYWORD
+class : KEYWORD
+Program : IDENTIFIER
+is : KEYWORD
+var : KEYWORD
+math : IDENTIFIER
+: : SPECIAL_SYMBOL
+Math : IDENTIFIER
+( : SPECIAL_SYMBOL
+) : SPECIAL_SYMBOL
+end : KEYWORD
+
+==============================AST==============================
+├──  Class: Math
+│   └──  Method: compute() : Integer
+│       ├──  Local Var: a : Integer
+│       ├──  Local Var: b : Integer
+│       └──  Return: 2.Mult(4)
+└──  Class: Program
+    └──  Field: math : Math
+===============================================================
+
+
+========== Class Table ==========
+Class: Math
+  Parent: none
+  Fields:
+    (no fields)
+  Methods:
+    compute() : Integer
+      Symbol Table:
+      a : Integer
+      b : Integer
+
+Class: Program
+  Parent: none
+  Fields:
+    math : Math
+  Methods:
+    (no methods)
+
+=================================
+
+
+==============================Optimized AST==============================
+├──  Class: Math
+│   └──  Method: compute() : Integer
+│       └──  Return: 8
+└──  Class: Program
+    └──  Field: math : Math
+=========================================================================
+

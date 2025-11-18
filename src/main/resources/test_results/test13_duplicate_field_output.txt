@@ -1,0 +1,26 @@
+class : KEYWORD
+Test : IDENTIFIER
+is : KEYWORD
+var : KEYWORD
+x : IDENTIFIER
+: : SPECIAL_SYMBOL
+Integer : IDENTIFIER
+var : KEYWORD
+x : IDENTIFIER
+: : SPECIAL_SYMBOL
+Real : IDENTIFIER
+end : KEYWORD
+class : KEYWORD
+Program : IDENTIFIER
+is : KEYWORD
+end : KEYWORD
+
+==============================AST==============================
+├──  Class: Test
+│   ├──  Field: x : Integer
+│   └──  Field: x : Real
+└──  Class: Program
+===============================================================
+
+
+Semantic Error: Duplicate field 'x' in class 'Test'

@@ -1,0 +1,16 @@
+# Test 07: Перегрузка методов с разными типами
+
+class Math is
+  method multiply(x: Integer, y: Integer) : Integer is
+    return x.Mult(y)
+  end
+  
+  method multiply(x: Real, y: Real) : Real is
+    return x.Mult(y)
+  end
+end
+
+class Program is
+  var math : Math()
+end
+

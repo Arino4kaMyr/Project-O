@@ -13,3 +13,18 @@ fun toJasminType(type: ClassName): String {
         }
     }
 }
+
+fun numberToJasmin(value: Long): String {
+    return when (value) {
+        -1L -> "    iconst_m1\n"
+        0L -> "    iconst_0\n"
+        1L -> "    iconst_1\n"
+        2L -> "    iconst_2\n"
+        3L -> "    iconst_3\n"
+        4L -> "    iconst_4\n"
+        5L -> "    iconst_5\n"
+        in -128L..127L -> "    bipush $value\n"
+        in -32768L..32767L -> "    sipush $value\n"
+        else -> "    ldc $value\n"
+    }
+}

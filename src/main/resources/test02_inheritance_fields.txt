@@ -1,0 +1,18 @@
+# Test 02: Наследование полей
+
+class Animal is
+  var name : Integer
+end
+
+class Dog extends Animal is
+  var breed : Integer
+  
+  method getName() : Integer is
+    return this.name
+  end
+end
+
+class Program is
+  var dog : Dog()
+end
+

@@ -1,0 +1,105 @@
+class : KEYWORD
+Math : IDENTIFIER
+is : KEYWORD
+method : KEYWORD
+multiply : IDENTIFIER
+( : SPECIAL_SYMBOL
+x : IDENTIFIER
+: : SPECIAL_SYMBOL
+Integer : IDENTIFIER
+, : SPECIAL_SYMBOL
+y : IDENTIFIER
+: : SPECIAL_SYMBOL
+Integer : IDENTIFIER
+) : SPECIAL_SYMBOL
+: : SPECIAL_SYMBOL
+Integer : IDENTIFIER
+is : KEYWORD
+return : KEYWORD
+x : IDENTIFIER
+. : SPECIAL_SYMBOL
+Mult : IDENTIFIER
+( : SPECIAL_SYMBOL
+y : IDENTIFIER
+) : SPECIAL_SYMBOL
+end : KEYWORD
+method : KEYWORD
+multiply : IDENTIFIER
+( : SPECIAL_SYMBOL
+x : IDENTIFIER
+: : SPECIAL_SYMBOL
+Real : IDENTIFIER
+, : SPECIAL_SYMBOL
+y : IDENTIFIER
+: : SPECIAL_SYMBOL
+Real : IDENTIFIER
+) : SPECIAL_SYMBOL
+: : SPECIAL_SYMBOL
+Real : IDENTIFIER
+is : KEYWORD
+return : KEYWORD
+x : IDENTIFIER
+. : SPECIAL_SYMBOL
+Mult : IDENTIFIER
+( : SPECIAL_SYMBOL
+y : IDENTIFIER
+) : SPECIAL_SYMBOL
+end : KEYWORD
+end : KEYWORD
+class : KEYWORD
+Program : IDENTIFIER
+is : KEYWORD
+var : KEYWORD
+math : IDENTIFIER
+: : SPECIAL_SYMBOL
+Math : IDENTIFIER
+( : SPECIAL_SYMBOL
+) : SPECIAL_SYMBOL
+end : KEYWORD
+
+==============================AST==============================
+├──  Class: Math
+│   ├──  Method: multiply(x: Integer, y: Integer) : Integer
+│   │   └──  Return: x.Mult(y)
+│   └──  Method: multiply(x: Real, y: Real) : Real
+│       └──  Return: x.Mult(y)
+└──  Class: Program
+    └──  Field: math : Math
+===============================================================
+
+
+========== Class Table ==========
+Class: Math
+  Parent: none
+  Fields:
+    (no fields)
+  Methods:
+    multiply(x: Integer, y: Integer) : Integer
+      Symbol Table:
+      x : Integer
+      y : Integer
+    multiply(x: Real, y: Real) : Real
+      Symbol Table:
+      x : Real
+      y : Real
+
+Class: Program
+  Parent: none
+  Fields:
+    math : Math
+  Methods:
+    (no methods)
+
+=================================
+
+
+==============================Optimized AST==============================
+├──  Class: Math
+│   ├──  Method: multiply(x: Integer, y: Integer) : Integer
+│   │   └──  Return: x.Mult(y)
+│   └──  Method: multiply(x: Real, y: Real) : Real
+│       └──  Return: x.Mult(y)
+└──  Class: Program
+    └──  Field: math : Math
+=========================================================================
+

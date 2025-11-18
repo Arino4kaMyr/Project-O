@@ -1,0 +1,16 @@
+class : KEYWORD
+Test : IDENTIFIER
+is : KEYWORD
+var : KEYWORD
+x : IDENTIFIER
+: : SPECIAL_SYMBOL
+Integer : IDENTIFIER
+end : KEYWORD
+
+==============================AST==============================
+└──  Class: Test
+    └──  Field: x : Integer
+===============================================================
+
+
+Semantic Error: Program class doesn't exist

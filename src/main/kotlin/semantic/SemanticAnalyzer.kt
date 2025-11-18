@@ -375,19 +375,36 @@ class SemanticAnalyzer(private var program: Program) {
         className: String,
         methodName: String
     ) {
+        // Обработка this.field
+        val actualVarName = if (varName.startsWith("this.")) {
+            varName.removePrefix("this.")
+        } else {
+            varName
+        }
+        
+        // Если это this.field, сразу ищем в полях класса
+        if (varName.startsWith("this.")) {
+            if (classSymbol.findField(actualVarName) != null) {
+                return
+            }
+            throw exceptions.SematicException(
+                "Unknown field '${actualVarName}' in class '${className}'"
+            )
+        }
+        
         // Сначала ищем в локальных переменных метода (параметры + локальные)
-        if (symbolTable.contains(varName)) {
+        if (symbolTable.contains(actualVarName)) {
             return
         }
 
         // Затем ищем в полях класса (с учетом наследования)
-        if (classSymbol.findField(varName) != null) {
+        if (classSymbol.findField(actualVarName) != null) {
             return
         }
 
         // Переменная не найдена
         throw exceptions.SematicException(
-            "Unknown variable '${varName}' in method '${methodName}' of class '${className}'"
+            "Unknown variable '${actualVarName}' in method '${methodName}' of class '${className}'"
         )
     }
 
@@ -592,20 +609,38 @@ class SemanticAnalyzer(private var program: Program) {
         className: String,
         methodName: String
     ): ClassName {
+        // Обработка this.field
+        val actualVarName = if (varName.startsWith("this.")) {
+            varName.removePrefix("this.")
+        } else {
+            varName
+        }
+        
+        // Если это this.field, сразу ищем в полях класса
+        if (varName.startsWith("this.")) {
+            val field = classSymbol.findField(actualVarName)
+            if (field != null) {
+                return field.type
+            }
+            throw exceptions.SematicException(
+                "Unknown field '${actualVarName}' in class '${className}'"
+            )
+        }
+        
         // Сначала ищем в локальных переменных
-        val localVar = symbolTable.findSymbol(varName)
+        val localVar = symbolTable.findSymbol(actualVarName)
         if (localVar != null) {
             return localVar.type
         }
 
         // Затем ищем в полях класса
-        val field = classSymbol.findField(varName)
+        val field = classSymbol.findField(actualVarName)
         if (field != null) {
             return field.type
         }
 
         throw exceptions.SematicException(
-            "Variable '${varName}' not found in method '${methodName}' of class '${className}'"
+            "Variable '${actualVarName}' not found in method '${methodName}' of class '${className}'"
         )
     }
 

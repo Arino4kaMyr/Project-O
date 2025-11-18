@@ -1,0 +1,15 @@
+# Test 12: Несовместимость типов (ошибка)
+#Semantic Error - Type mismatch
+
+class Test is
+  var x : Integer
+  
+  method foo() is
+    var y : Real(5.0)
+    x := y
+  end
+end
+
+class Program is
+end
+

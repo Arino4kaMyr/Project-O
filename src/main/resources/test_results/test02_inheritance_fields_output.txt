@@ -1,0 +1,93 @@
+class : KEYWORD
+Animal : IDENTIFIER
+is : KEYWORD
+var : KEYWORD
+name : IDENTIFIER
+: : SPECIAL_SYMBOL
+Integer : IDENTIFIER
+end : KEYWORD
+class : KEYWORD
+Dog : IDENTIFIER
+extends : KEYWORD
+Animal : IDENTIFIER
+is : KEYWORD
+var : KEYWORD
+breed : IDENTIFIER
+: : SPECIAL_SYMBOL
+Integer : IDENTIFIER
+method : KEYWORD
+getName : IDENTIFIER
+( : SPECIAL_SYMBOL
+) : SPECIAL_SYMBOL
+: : SPECIAL_SYMBOL
+Integer : IDENTIFIER
+is : KEYWORD
+return : KEYWORD
+this : KEYWORD
+. : SPECIAL_SYMBOL
+name : IDENTIFIER
+end : KEYWORD
+end : KEYWORD
+class : KEYWORD
+Program : IDENTIFIER
+is : KEYWORD
+var : KEYWORD
+dog : IDENTIFIER
+: : SPECIAL_SYMBOL
+Dog : IDENTIFIER
+( : SPECIAL_SYMBOL
+) : SPECIAL_SYMBOL
+end : KEYWORD
+
+==============================AST==============================
+├──  Class: Animal
+│   └──  Field: name : Integer
+├──  Class: Dog
+│    extends Animal
+│   ├──  Field: breed : Integer
+│   └──  Method: getName() : Integer
+│       └──  Return: this.name
+└──  Class: Program
+    └──  Field: dog : Dog
+===============================================================
+
+
+========== Class Table ==========
+Class: Animal
+  Parent: none
+  Fields:
+    name : Integer
+  Methods:
+    (no methods)
+
+Class: Dog
+  Parent: Animal
+  Fields:
+    breed : Integer
+  Methods:
+    getName() : Integer
+      Symbol Table:
+      (no variables)
+
+Class: Program
+  Parent: none
+  Fields:
+    dog : Dog
+  Methods:
+    (no methods)
+
+=================================
+
+
+==============================Optimized AST==============================
+├──  Class: Animal
+│   └──  Field: name : Integer
+├──  Class: Dog
+│    extends Animal
+│   ├──  Field: breed : Integer
+│   └──  Method: getName() : Integer
+│       └──  Return: this.name
+└──  Class: Program
+    └──  Field: dog : Dog
+=========================================================================
+

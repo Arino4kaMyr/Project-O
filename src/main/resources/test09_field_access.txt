@@ -1,0 +1,19 @@
+# Test 09: Доступ к полям класса
+
+class Point is
+  var x : Integer
+  var y : Integer
+  
+  method getX() : Integer is
+    return this.x
+  end
+  
+  method setX(newX: Integer) is
+    this.x := newX
+  end
+end
+
+class Program is
+  var p : Point()
+end
+

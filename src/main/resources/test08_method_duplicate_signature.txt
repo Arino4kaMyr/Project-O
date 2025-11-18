@@ -1,0 +1,16 @@
+# Test 08: Дублирование сигнатуры метода (ошибка)
+#Semantic Error - Method with signature already exists
+
+class Test is
+  method foo(x: Integer) : Integer is
+    return x
+  end
+  
+  method foo(x: Integer) : Real is
+    return x
+  end
+end
+
+class Program is
+end
+

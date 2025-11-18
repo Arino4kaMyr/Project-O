@@ -1,0 +1,27 @@
+class : KEYWORD
+Test : IDENTIFIER
+is : KEYWORD
+method : KEYWORD
+foo : IDENTIFIER
+( : SPECIAL_SYMBOL
+) : SPECIAL_SYMBOL
+is : KEYWORD
+x : IDENTIFIER
+:= : SPECIAL_SYMBOL
+5 : NUMBER
+end : KEYWORD
+end : KEYWORD
+class : KEYWORD
+Program : IDENTIFIER
+is : KEYWORD
+end : KEYWORD
+
+==============================AST==============================
+├──  Class: Test
+│   └──  Method: foo() : void
+│       └──  Assignment: x := 5
+└──  Class: Program
+===============================================================
+
+
+Semantic Error: Unknown variable 'x' in method 'foo' of class 'Test'

@@ -1,0 +1,19 @@
+class : KEYWORD
+A : IDENTIFIER
+extends : KEYWORD
+A : IDENTIFIER
+is : KEYWORD
+end : KEYWORD
+class : KEYWORD
+Program : IDENTIFIER
+is : KEYWORD
+end : KEYWORD
+
+==============================AST==============================
+├──  Class: A
+│    extends A
+└──  Class: Program
+===============================================================
+
+
+Semantic Error: Class 'A' cannot extend itself

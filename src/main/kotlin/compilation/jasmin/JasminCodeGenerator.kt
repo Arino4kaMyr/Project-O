@@ -1,6 +1,7 @@
 package compilation.jasmin
 
 import semantic.ClassSymbol
+import semantic.MethodSymbol
 import semantic.tables.ClassTable
 import syntaxer.*
 
@@ -97,7 +98,7 @@ class JasminCodeGenerator(
                 sb = sb,
                 body = ctor.body,
                 classSymbol = classSymbol,
-                methodName = "<init>"
+                methodSymbol = MethodSymbol("<init>", emptyList(), null, null)
             )
 
             // 4. Возврат
@@ -148,7 +149,7 @@ class JasminCodeGenerator(
                     sb = sb,
                     body = body,
                     classSymbol = classSymbol,
-                    methodName = methodSymbol.name
+                    methodSymbol = methodSymbol
                 )
             }
 
@@ -166,13 +167,13 @@ class JasminCodeGenerator(
         sb: StringBuilder,
         body: MethodBody,
         classSymbol: ClassSymbol,
-        methodName: String
+        methodSymbol: MethodSymbol
     ) {
         when (body) {
             is MethodBody.BlockBody -> {
                 // Генерируем байткод для каждого стейтмента
                 body.stmts.forEach { stmt ->
-                    generateStmt(sb, stmt, classSymbol, methodName)
+                    generateStmt(sb, stmt, classSymbol, methodSymbol)
                 }
             }
         }
@@ -182,13 +183,13 @@ class JasminCodeGenerator(
         sb: StringBuilder,
         stmt: Stmt,
         classSymbol: ClassSymbol,
-        methodName: String
+        methodSymbol: MethodSymbol
     ) {
         when (stmt) {
             is Stmt.Return -> {
                 // Если есть выражение: вернуть его значение
                 stmt.expr?.let { expr ->
-                    generateExpr(sb, expr, classSymbol, methodName)
+                    generateExpr(sb, expr, classSymbol, methodSymbol)
                     // Предположим, что пока работаем только с Integer → ireturn
                     sb.append("    ireturn\n")
                 } ?: run {
@@ -199,26 +200,47 @@ class JasminCodeGenerator(
 
             is Stmt.ExprStmt -> {
                 // Просто вычисляем выражение, результат игнорируем (снимется за счёт последующих операций или оставим)
-                generateExpr(sb, stmt.expr, classSymbol, methodName)
+                generateExpr(sb, stmt.expr, classSymbol, methodSymbol)
                 // Для простых случаев (например, вызов метода, который возвращает значение),
                 // можно явно снимать со стека инструкцией pop:
                 sb.append("    pop\n")
             }
 
             is Stmt.Assignment -> {
-                // Пока не реализуем — здесь нужна таблица локальных/полей и istore/putfield
-                // Оставим как TODO
-                // TODO: generate assignment
+                val name = stmt.target
+
+                // Локал/параметр?
+                val local = methodSymbol.symbolTable.findSymbol(name)
+                if (local != null) {
+                    // expr → стек
+                    generateExpr(sb, stmt.expr, classSymbol, methodSymbol)
+                    val index = methodSymbol.symbolTable.getIndex(name)
+                    // считаем, что int/bool
+                    sb.append("    istore $index\n")
+                    return
+                }
+
+                // Поле класса?
+                val field = classSymbol.findField(name)
+                if (field != null) {
+                    val jasminType = toJasminType(field.type)
+                    // this.<field> := expr
+                    // Надо: aload_0, expr, putfield
+                    sb.append("    aload_0\n")
+                    generateExpr(sb, stmt.expr, classSymbol, methodSymbol)
+                    sb.append("    putfield ${classSymbol.name}/${field.name} $jasminType\n")
+                    return
+                }
+
+                error("Unknown variable/field '${name}' in ${classSymbol.name}.${methodSymbol.name}")
             }
 
             is Stmt.While -> {
-                // Пока не реализуем — нужны labels и ветвления
-                // TODO: generate while
+                generateWhile(sb, stmt, classSymbol, methodSymbol)
             }
 
             is Stmt.If -> {
-                // Пока не реализуем — нужны labels и ветвления
-                // TODO: generate if
+                generateIf(sb, stmt, classSymbol, methodSymbol)
             }
         }
     }
@@ -227,7 +249,7 @@ class JasminCodeGenerator(
         sb: StringBuilder,
         expr: Expr,
         classSymbol: ClassSymbol,
-        methodName: String
+        methodSymbol: MethodSymbol
     ) {
         when (expr) {
             is Expr.IntLit -> {
@@ -248,9 +270,28 @@ class JasminCodeGenerator(
             }
 
             is Expr.Identifier -> {
-                // Здесь нужно знать, где хранится переменная: локал или поле.
-                // Пока можно оставить заглушку, потом привяжем к MethodTable.
-                // TODO: iload N / getfield
+                val name = expr.name
+
+                // 1. Локальная переменная / параметр?
+                val local = methodSymbol.symbolTable.findSymbol(name)
+                if (local != null) {
+                    val index = methodSymbol.symbolTable.getIndex(name)
+                    // Сейчас считаем, что это int/bool → iload
+                    sb.append("    iload $index\n")
+                    return
+                }
+
+                // 2. Поле класса?
+                val field = classSymbol.findField(name)
+                if (field != null) {
+                    val jasminType = toJasminType(field.type)
+                    // this.field
+                    sb.append("    aload_0\n")
+                    sb.append("    getfield ${classSymbol.name}/${field.name} $jasminType\n")
+                    return
+                }
+
+                error("Unknown identifier '$name' in ${classSymbol.name}.${methodSymbol.name}")
             }
 
             is Expr.This -> {
@@ -259,11 +300,21 @@ class JasminCodeGenerator(
             }
 
             is Expr.Call -> {
-                // TODO: загрузка receiver (если есть), аргументов, вызов invoke*.
+                generateCallExpr(sb, expr, classSymbol, methodSymbol)
             }
 
             is Expr.FieldAccess -> {
-                // TODO: сгенерировать receiver и getfield
+                // если нет того к чему применяем метод,
+                generateExpr(sb, expr.receiver ?: Expr.This, classSymbol, methodSymbol)
+                val recvType: ClassName = /* здесь нужен тип receiver из семантики, сейчас можно взять ClassName.Simple(classSymbol.name) для this */
+                    ClassName.Simple(classSymbol.name)
+                val recvClass = classTable.getClass(recvType)
+                    ?: error("Unknown class for receiver in FieldAccess: $recvType")
+
+                val field = recvClass.findField(expr.name)
+                    ?: error("Unknown field '${expr.name}' in class '${recvClass.name}'")
+                val jasminType = toJasminType(field.type)
+                sb.append("    getfield ${recvClass.name}/${field.name} $jasminType\n")
             }
 
             is Expr.ClassNameExpr -> {
@@ -273,6 +324,131 @@ class JasminCodeGenerator(
         }
     }
 
+    private fun generateWhile(
+        sb: StringBuilder,
+        stmt: Stmt.While,
+        classSymbol: ClassSymbol,
+        methodSymbol: MethodSymbol
+    ) {
+        val startLabel = newLabel("Lstart_")
+        val endLabel = newLabel("Lend_")
+
+        sb.append("$startLabel:\n")
+        generateExpr(sb, stmt.cond, classSymbol, methodSymbol)
+        sb.append("    ifeq $endLabel\n")
+        generateMethodBody(sb, stmt.body, classSymbol, methodSymbol)
+        sb.append("    goto $startLabel\n")
+        sb.append("$endLabel:\n")
+    }
+
+
+    private fun generateIf(
+        sb: StringBuilder,
+        stmt: Stmt.If,
+        classSymbol: ClassSymbol,
+        methodSymbol: MethodSymbol
+    ) {
+        val elseLabel = newLabel("Lelse_")
+        val endLabel = newLabel("Lend_")
+
+        // cond
+        generateExpr(sb, stmt.cond, classSymbol, methodSymbol)
+        sb.append("    ifeq $elseLabel\n")
+
+        // thenBody
+        generateMethodBody(sb, stmt.thenBody, classSymbol, methodSymbol)
+        sb.append("    goto $endLabel\n")
+
+        // elseLabel
+        sb.append("$elseLabel:\n")
+        stmt.elseBody?.let { elseBody ->
+            generateMethodBody(sb, elseBody, classSymbol, methodSymbol)
+        }
+
+        // endLabel
+        sb.append("$endLabel:\n")
+    }
+
+    private fun generateCallExpr(
+        sb: StringBuilder,
+        call: Expr.Call,
+        classSymbol: ClassSymbol,
+        methodSymbol: MethodSymbol
+    ) {
+        // Типы аргументов — в идеале надо взять из семантики (getTypeOfExpr),
+        // но здесь можем использовать methodSymbol или classTable, если это вызов своего метода.
+
+        // Сначала receiver (если есть)
+        if (call.receiver != null) {
+            generateExpr(sb, call.receiver, classSymbol, methodSymbol)
+        }
+
+        // Затем аргументы
+        call.args.forEach { arg ->
+            generateExpr(sb, arg, classSymbol, methodSymbol)
+        }
+
+        // Разрешаем метод
+        // Если receiver == null → считаем, что это статический метод текущего класса
+        if (call.receiver == null) {
+            val argTypes: List<ClassName> = call.args.map { _ ->
+                // здесь по уму нужен тип из семантики, но для упрощения:
+                ClassName.Simple("Integer")
+            }
+
+            val targetMethod = resolveMethodForCall(
+                ownerClass = classSymbol,
+                methodName = call.method,
+                argTypes = argTypes
+            )
+
+            val argsDesc = targetMethod.params.joinToString("") { toJasminType(it.type) }
+            val retDesc = targetMethod.returnType?.let { toJasminType(it) } ?: "V"
+
+            sb.append("    invokestatic ${classSymbol.name}/${targetMethod.name}($argsDesc)$retDesc\n")
+        } else {
+            // метод на объекте
+            val argTypes: List<ClassName> = call.args.map { ClassName.Simple("Integer") } // здесь тоже нужно взять реальные типы
+
+            // тип receiver'а — тут по-хорошему вызывать семантический getTypeOfExpr
+            val recvType = ClassName.Simple(classSymbol.name)
+            val recvClass = classTable.getClass(recvType)
+                ?: error("Unknown receiver class for call: $recvType")
+
+            val targetMethod = resolveMethodForCall(
+                ownerClass = recvClass,
+                methodName = call.method,
+                argTypes = argTypes
+            )
+
+            val argsDesc = targetMethod.params.joinToString("") { toJasminType(it.type) }
+            val retDesc = targetMethod.returnType?.let { toJasminType(it) } ?: "V"
+
+            sb.append("    invokevirtual ${recvClass.name}/${targetMethod.name}($argsDesc)$retDesc\n")
+        }
+    }
+
+    private fun resolveMethodForCall(
+        ownerClass: ClassSymbol,
+        methodName: String,
+        argTypes: List<ClassName>
+    ): MethodSymbol {
+        val candidates = ownerClass.findMethods(methodName)
+        val matched = candidates.find { m ->
+            m.params.size == argTypes.size &&
+                    m.params.mapIndexed { index, p -> p.type }.zip(argTypes).all { (t1, t2) ->
+                        t1 is ClassName.Simple && t2 is ClassName.Simple && t1.name == t2.name
+                    }
+        } ?: error("No suitable method '$methodName' found in class '${ownerClass.name}'")
+        return matched
+    }
+
+
+    //metrics for recognize amount of if and while
+    companion object {
+        private var labelCounter = 0
+        private fun newLabel(base: String = "L"): String = "${base}${labelCounter++}"
+    }
 
 
 }

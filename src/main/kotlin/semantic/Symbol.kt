@@ -98,7 +98,7 @@ class MethodSymbol(
     name: String,
     val params: List<ParamSymbol>,
     val returnType: ClassName?,
-    val astNode: MemberDecl.MethodDecl
+    val astNode: MemberDecl.MethodDecl?
 ) : Symbol(name) {
     var ownerClass: ClassSymbol? = null
     val symbolTable = semantic.tables.MethodTable()  // Таблица символов метода

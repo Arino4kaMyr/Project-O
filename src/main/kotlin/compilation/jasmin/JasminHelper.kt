@@ -28,3 +28,4 @@ fun numberToJasmin(value: Long): String {
         else -> "    ldc $value\n"
     }
 }
+

@@ -11,4 +11,6 @@ end
 class Program is
   var m : Math()
   var x : Integer(m.FoldAll())
+
+  method main
 end

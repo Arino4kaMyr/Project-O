@@ -8,14 +8,23 @@ import syntaxer.ClassName
  * Таблица символов для метода
  */
 class MethodTable {
-    private val symbols: MutableMap<String, VarSymbol> = mutableMapOf()
+
+    data class LocalInfo(
+        val symbol: VarSymbol,
+        val index: Int
+    )
+
+    private val locals: MutableMap<String, LocalInfo> = mutableMapOf()
+    private var nextIndex: Int = 0
 
     /**
      * Добавить параметр в таблицу
      */
     fun addParam(param: ParamSymbol) {
         val varSymbol = VarSymbol(param.name, param.type)
-        symbols[param.name] = varSymbol
+        val index = nextIndex
+        nextIndex += 1
+        locals[param.name] = LocalInfo(varSymbol, index)
     }
 
     /**
@@ -23,54 +32,59 @@ class MethodTable {
      */
     fun addLocalVariable(name: String, type: ClassName) {
         val varSymbol = VarSymbol(name, type)
-        symbols[name] = varSymbol
+        val index = nextIndex
+        nextIndex += 1
+        locals[name] = LocalInfo(varSymbol, index)
     }
 
     /**
      * Найти символ по имени
      */
-    fun findSymbol(name: String): VarSymbol? = symbols[name]
+    fun findSymbol(name: String): VarSymbol? = locals[name]?.symbol
+
+    /**
+     * Получить индекс локальной переменной/параметра по имени. Нужно для написания команд в Jasmin
+     */
+    fun getIndex(name: String): Int {
+        return locals[name]?.index
+            ?: throw IllegalStateException("Local variable '$name' not found in MethodTable")
+    }
 
     /**
      * Проверить, существует ли символ с данным именем
      */
-    fun contains(name: String): Boolean = symbols.containsKey(name)
+    fun contains(name: String): Boolean = locals.containsKey(name)
 
     /**
      * Получить все символы
      */
-    fun getAllSymbols(): Map<String, VarSymbol> = symbols.toMap()
+    fun getAllSymbols(): Map<String, VarSymbol> =
+        locals.mapValues { it.value.symbol }
 
     /**
-     * Получить все параметры
+     * Получить все параметры (упрощённо)
      */
-    fun getParams(): List<VarSymbol> {
-        // Параметры - это первые символы, добавленные в таблицу
-        // Но так как мы не храним порядок, вернем все
-        return symbols.values.toList()
-    }
+    fun getParams(): List<VarSymbol> =
+        locals.values.map { it.symbol }
 
-    /**
-     * Очистить таблицу
-     */
     fun clear() {
-        symbols.clear()
+        locals.clear()
+        nextIndex = 0
     }
 
-    /**
-     * Печать таблицы символов метода
-     */
     fun print(indent: String = "      ") {
-        if (symbols.isEmpty()) {
+        if (locals.isEmpty()) {
             println("${indent}(no variables)")
         } else {
-            symbols.values.forEach { symbol ->
+            locals.values.forEach { info ->
+                val symbol = info.symbol
                 val typeName = when (symbol.type) {
                     is ClassName.Simple -> symbol.type.name
                 }
-                println("${indent}${symbol.name} : $typeName")
+                println("${indent}${symbol.name} : $typeName (index=${info.index})")
             }
         }
     }
 }
+
 

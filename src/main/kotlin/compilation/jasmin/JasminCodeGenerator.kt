@@ -139,9 +139,8 @@ class JasminCodeGenerator(
             // пока делаем все методы public
             sb.append(".method public ${methodSymbol.name}($paramDesc)$returnDesc\n")
 
-            // TODO: .limit stack / .limit locals можно добавить позже (или довериться Jasminу, конечно да!)
-            // sb.append("    .limit stack 32\n")
-            // sb.append("    .limit locals 32\n")
+            sb.append("    .limit stack 32\n")
+            sb.append("    .limit locals 16\n")
 
             // 2. Тело метода, если оно есть
             methodDecl.body?.let { body ->
@@ -159,9 +158,33 @@ class JasminCodeGenerator(
             }
 
             sb.append(".end method\n\n")
+
+            if (className == "Program" &&
+                methodSymbol.name == "main" &&
+                methodSymbol.params.isEmpty() &&
+                returnDesc == "V"
+            ) {
+                generateJvmMainWrapper(sb, classSymbol, methodSymbol)
+            }
         }
     }
 
+    private fun generateJvmMainWrapper(
+        sb: StringBuilder,
+        classSymbol: ClassSymbol,
+        methodSymbol: MethodSymbol
+    ) {
+        sb.append(".method public static main([Ljava/lang/String;)V\n")
+        sb.append("    .limit stack 32\n")
+        sb.append("    .limit locals 16\n")
+
+        sb.append("    new ${classSymbol.name}\n")
+        sb.append("    dup\n")
+        sb.append("    invokespecial ${classSymbol.name}/<init>()V\n")
+        sb.append("    invokevirtual ${classSymbol.name}/${methodSymbol.name}()V\n")
+        sb.append("    return\n")
+        sb.append(".end method\n\n")
+    }
 
     private fun generateMethodBody(
         sb: StringBuilder,
@@ -375,27 +398,23 @@ class JasminCodeGenerator(
         classSymbol: ClassSymbol,
         methodSymbol: MethodSymbol
     ) {
-        // Типы аргументов — в идеале надо взять из семантики (getTypeOfExpr),
-        // но здесь можем использовать methodSymbol или classTable, если это вызов своего метода.
-
-        // Сначала receiver (если есть)
+        // 1. receiver и его тип
+        val receiverType: ClassName?
         if (call.receiver != null) {
             generateExpr(sb, call.receiver, classSymbol, methodSymbol)
+            receiverType = inferExprType(call.receiver, classSymbol, methodSymbol)
+        } else {
+            receiverType = null
         }
 
-        // Затем аргументы
-        call.args.forEach { arg ->
+        // 2. аргументы и их типы
+        val argTypes = call.args.map { arg ->
             generateExpr(sb, arg, classSymbol, methodSymbol)
+            inferExprType(arg, classSymbol, methodSymbol)
         }
 
-        // Разрешаем метод
-        // Если receiver == null → считаем, что это статический метод текущего класса
-        if (call.receiver == null) {
-            val argTypes: List<ClassName> = call.args.map { _ ->
-                // здесь по уму нужен тип из семантики, но для упрощения:
-                ClassName.Simple("Integer")
-            }
-
+        if (receiverType == null) {
+            // Вызов метода текущего класса как статического (упрощённо)
             val targetMethod = resolveMethodForCall(
                 ownerClass = classSymbol,
                 methodName = call.method,
@@ -407,13 +426,9 @@ class JasminCodeGenerator(
 
             sb.append("    invokestatic ${classSymbol.name}/${targetMethod.name}($argsDesc)$retDesc\n")
         } else {
-            // метод на объекте
-            val argTypes: List<ClassName> = call.args.map { ClassName.Simple("Integer") } // здесь тоже нужно взять реальные типы
-
-            // тип receiver'а — тут по-хорошему вызывать семантический getTypeOfExpr
-            val recvType = ClassName.Simple(classSymbol.name)
-            val recvClass = classTable.getClass(recvType)
-                ?: error("Unknown receiver class for call: $recvType")
+            // Вызов метода на объекте: receiver.method(args)
+            val recvClass = classTable.getClass(receiverType)
+                ?: error("Unknown receiver class for call: $receiverType")
 
             val targetMethod = resolveMethodForCall(
                 ownerClass = recvClass,
@@ -427,6 +442,59 @@ class JasminCodeGenerator(
             sb.append("    invokevirtual ${recvClass.name}/${targetMethod.name}($argsDesc)$retDesc\n")
         }
     }
+
+    private fun inferExprType(
+        expr: Expr,
+        classSymbol: ClassSymbol,
+        methodSymbol: MethodSymbol
+    ): ClassName {
+        return when (expr) {
+            is Expr.IntLit -> ClassName.Simple("Integer")
+            is Expr.RealLit -> ClassName.Simple("Real")
+            is Expr.BoolLit -> ClassName.Simple("Bool")
+
+            is Expr.This -> ClassName.Simple(classSymbol.name)
+
+            is Expr.Identifier -> {
+                val name = expr.name
+                // Сначала ищем среди локальных/параметров метода
+                methodSymbol.symbolTable.findSymbol(name)?.type
+                // Потом среди полей класса (с учётом наследования)
+                    ?: classSymbol.findField(name)?.type
+                    ?: ClassName.Simple("Unknown")
+            }
+
+            is Expr.FieldAccess -> {
+                // receiver.field
+                val recvType = inferExprType(expr.receiver, classSymbol, methodSymbol)
+                val recvClass = classTable.getClass(recvType)
+                    ?: return ClassName.Simple("Unknown")
+
+                recvClass.findField(expr.name)?.type ?: ClassName.Simple("Unknown")
+            }
+
+            is Expr.Call -> {
+                val receiverType: ClassName?
+                if (expr.receiver != null) {
+                    receiverType = inferExprType(expr.receiver, classSymbol, methodSymbol)
+                } else {
+                    receiverType = ClassName.Simple(classSymbol.name) // вызов метода своего класса
+                }
+
+                val ownerClass = classTable.getClass(receiverType)
+                    ?: return ClassName.Simple("Unknown")
+
+                // типы аргументов пока грубо считаем Unknown/Integer — тебе здесь важнее всего receiver
+                val argTypes = expr.args.map { inferExprType(it, classSymbol, methodSymbol) }
+
+                val targetMethod = resolveMethodForCall(ownerClass, expr.method, argTypes)
+                targetMethod.returnType ?: ClassName.Simple("Unknown")
+            }
+
+            is Expr.ClassNameExpr -> expr.cn
+        }
+    }
+
 
     private fun resolveMethodForCall(
         ownerClass: ClassSymbol,

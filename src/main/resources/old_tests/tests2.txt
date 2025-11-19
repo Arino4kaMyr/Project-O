@@ -1,9 +1,6 @@
-class Math extends Class is
+class Math is
   this()
   this(el: Integer)
-  method Square(x: Integer) : Integer is
-    return x.Mult(x)
-  end
 
   method SquareSum(x: Integer, y: Integer) : Integer is
     var sum : Integer(x.Plus(y))
@@ -12,8 +9,11 @@ class Math extends Class is
 end
 
 class Program is
-  var m : Math()
+  var m : Math(1)
   var a : Integer(3)
-  var b : Integer(4.0)
-  var result : Integer(m.SquareSum(a, b))
+  var b : Integer(4)
+  method main() is
+
+    m.SquareSum(a, b)
+  end
 end

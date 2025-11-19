@@ -29,3 +29,6 @@ fun numberToJasmin(value: Long): String {
     }
 }
 
+fun isBuiltin(type: ClassName): Boolean =
+    type is ClassName.Simple && type.name in listOf("Integer", "Real", "Bool")
+

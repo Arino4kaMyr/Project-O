@@ -72,10 +72,17 @@ class JasminCodeGenerator(
         if (constructors.isEmpty()) {
             // default <init>()V
             sb.append(".method public <init>()V\n")
+            sb.append("    .limit stack 32\n")
+            sb.append("    .limit locals 16\n")
             sb.append("    aload_0\n")
             // Вызов конструктора суперкласса
             val superName = classSymbol.parentClass?.name ?: "java/lang/Object"
             sb.append("    invokespecial $superName/<init>()V\n")
+
+            // Инициализация полей класса из AST VarDecl
+            createObject(classDecl, classSymbol, sb)
+
+
             sb.append("    return\n")
             sb.append(".end method\n\n")
             return
@@ -87,11 +94,17 @@ class JasminCodeGenerator(
                 toJasminType(param.type)
             }
             sb.append(".method public <init>($paramTypesDesc)V\n")
+            sb.append("    .limit stack 32\n")
+            sb.append("    .limit locals 16\n")
 
             // 2. Вызов super.<init>()
             sb.append("    aload_0\n")
             val superName = classSymbol.parentClass?.name ?: "java/lang/Object"
             sb.append("    invokespecial $superName/<init>()V\n")
+
+            // Инициализация полей класса из AST VarDecl
+            createObject(classDecl, classSymbol, sb)
+
 
             // 3. Генерация тела конструктора из AST body
             generateMethodBody(
@@ -106,6 +119,96 @@ class JasminCodeGenerator(
             sb.append(".end method\n\n")
         }
     }
+
+    private fun createObject(
+        classDecl: ClassDecl,
+        classSymbol: ClassSymbol,
+        sb: StringBuilder
+    ) {
+        classDecl.members.filterIsInstance<MemberDecl.VarDecl>().forEach { vDecl ->
+            val fieldSymbol = classSymbol.findField(vDecl.name)
+                ?: error("Field symbol not found for ${classSymbol.name}.${vDecl.name}")
+            val fieldType = fieldSymbol.type
+
+            when (val init = vDecl.init) {
+                is Expr.Call -> {
+                    val typeName = (fieldType as ClassName.Simple).name
+
+                    if (typeName == "Integer") {
+                        sb.append("    aload_0\n")
+                        val arg = init.args.singleOrNull()
+                        if (arg != null) {
+                            // Integer(3)
+                            generateExpr(
+                                sb,
+                                arg,
+                                classSymbol,
+                                MethodSymbol("<initField>", emptyList(), null, null)
+                            )
+                        } else {
+                            // Integer() или просто Integer без аргументов → 0
+                            sb.append("    iconst_0\n")
+                        }
+                        sb.append("    putfield ${classSymbol.name}/${vDecl.name} ${toJasminType(fieldType)}\n")
+
+                    } else if (typeName == "Real") {
+                        sb.append("    aload_0\n")
+                        val arg = init.args.singleOrNull()
+                        if (arg != null) {
+                            generateExpr(
+                                sb,
+                                arg,
+                                classSymbol,
+                                MethodSymbol("<initField>", emptyList(), null, null)
+                            )   // ldc2_w ...
+                        } else {
+                            // Real() → 0.0
+                            sb.append("    ldc2_w 0.0\n")
+                        }
+                        sb.append("    putfield ${classSymbol.name}/${vDecl.name} ${toJasminType(fieldType)}\n")
+
+                    } else if (typeName == "Bool") {
+                        sb.append("    aload_0\n")
+                        val arg = init.args.singleOrNull()
+                        if (arg != null) {
+                            generateExpr(
+                                sb,
+                                arg,
+                                classSymbol,
+                                MethodSymbol("<initField>", emptyList(), null, null)
+                            )   // iconst_0/1
+                        } else {
+                            // Bool() → false
+                            sb.append("    iconst_0\n")
+                        }
+                        sb.append("    putfield ${classSymbol.name}/${vDecl.name} ${toJasminType(fieldType)}\n")
+
+                    } else {
+                        // пользовательский класс: new Type(args) / invokespecial / putfield LType;
+                        sb.append("    aload_0\n")              // this
+                        sb.append("    new $typeName\n")
+                        sb.append("    dup\n")
+                        init.args.forEach { arg ->
+                            generateExpr(
+                                sb,
+                                arg,
+                                classSymbol,
+                                MethodSymbol("<initField>", emptyList(), null, null)
+                            )
+                        }
+                        val argsDesc = init.args.joinToString("") { "I" } // пока считаем все Integer
+                        sb.append("    invokespecial $typeName/<init>($argsDesc)V\n")
+                        sb.append("    putfield ${classSymbol.name}/${vDecl.name} ${toJasminType(fieldType)}\n")
+                    }
+                }
+
+                else -> {
+                    // при желании можно ещё отдельно обрабатывать IntLit/RealLit/BoolLit
+                }
+            }
+        }
+    }
+
 
     private fun generateMethods(
         sb: StringBuilder,
@@ -427,6 +530,29 @@ class JasminCodeGenerator(
             sb.append("    invokestatic ${classSymbol.name}/${targetMethod.name}($argsDesc)$retDesc\n")
         } else {
             // Вызов метода на объекте: receiver.method(args)
+            if (isBuiltin(receiverType)) {
+                // Сейчас предполагаем, что Integer/Real/Bool хранятся как JVM int,
+                // и Plus/Mult — это просто iadd/imul.
+                when (receiverType) {
+                    is ClassName.Simple -> when (receiverType.name) {
+                        "Integer" -> {
+                            when (call.method) {
+                                "Plus" -> {
+                                    // стек: [x, y] уже положили перед вызовом (receiver + args)
+                                    sb.append("    iadd\n")
+                                }
+                                "Mult" -> {
+                                    sb.append("    imul\n")
+                                }
+                                else -> error("Unknown Integer method '${call.method}'")
+                            }
+                        }
+                        else -> error("Builtin method calls for type '${receiverType.name}' not implemented")
+                    }
+                }
+                return
+            }
+
             val recvClass = classTable.getClass(receiverType)
                 ?: error("Unknown receiver class for call: $receiverType")
 

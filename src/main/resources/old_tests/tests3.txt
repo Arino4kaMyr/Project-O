@@ -10,7 +10,9 @@ end
 
 class Program is
   var m : Math()
-  var x : Integer(m.FoldAll())
+  var x : Integer()
 
-  method main
+  method main() is
+    x := m.FoldAll()
+  end
 end

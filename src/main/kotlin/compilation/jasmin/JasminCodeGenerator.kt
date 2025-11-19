@@ -72,10 +72,17 @@ class JasminCodeGenerator(
         if (constructors.isEmpty()) {
             // default <init>()V
             sb.append(".method public <init>()V\n")
+            sb.append("    .limit stack 32\n")
+            sb.append("    .limit locals 16\n")
             sb.append("    aload_0\n")
             // Вызов конструктора суперкласса
             val superName = classSymbol.parentClass?.name ?: "java/lang/Object"
             sb.append("    invokespecial $superName/<init>()V\n")
+
+            // Инициализация полей класса из AST VarDecl
+            createObject(classDecl, classSymbol, sb)
+
+
             sb.append("    return\n")
             sb.append(".end method\n\n")
             return
@@ -87,11 +94,17 @@ class JasminCodeGenerator(
                 toJasminType(param.type)
             }
             sb.append(".method public <init>($paramTypesDesc)V\n")
+            sb.append("    .limit stack 32\n")
+            sb.append("    .limit locals 16\n")
 
             // 2. Вызов super.<init>()
             sb.append("    aload_0\n")
             val superName = classSymbol.parentClass?.name ?: "java/lang/Object"
             sb.append("    invokespecial $superName/<init>()V\n")
+
+            // Инициализация полей класса из AST VarDecl
+            createObject(classDecl, classSymbol, sb)
+
 
             // 3. Генерация тела конструктора из AST body
             generateMethodBody(
@@ -106,6 +119,96 @@ class JasminCodeGenerator(
             sb.append(".end method\n\n")
         }
     }
+
+    private fun createObject(
+        classDecl: ClassDecl,
+        classSymbol: ClassSymbol,
+        sb: StringBuilder
+    ) {
+        classDecl.members.filterIsInstance<MemberDecl.VarDecl>().forEach { vDecl ->
+            val fieldSymbol = classSymbol.findField(vDecl.name)
+                ?: error("Field symbol not found for ${classSymbol.name}.${vDecl.name}")
+            val fieldType = fieldSymbol.type
+
+            when (val init = vDecl.init) {
+                is Expr.Call -> {
+                    val typeName = (fieldType as ClassName.Simple).name
+
+                    if (typeName == "Integer") {
+                        sb.append("    aload_0\n")
+                        val arg = init.args.singleOrNull()
+                        if (arg != null) {
+                            // Integer(3)
+                            generateExpr(
+                                sb,
+                                arg,
+                                classSymbol,
+                                MethodSymbol("<initField>", emptyList(), null, null)
+                            )
+                        } else {
+                            // Integer() или просто Integer без аргументов → 0
+                            sb.append("    iconst_0\n")
+                        }
+                        sb.append("    putfield ${classSymbol.name}/${vDecl.name} ${toJasminType(fieldType)}\n")
+
+                    } else if (typeName == "Real") {
+                        sb.append("    aload_0\n")
+                        val arg = init.args.singleOrNull()
+                        if (arg != null) {
+                            generateExpr(
+                                sb,
+                                arg,
+                                classSymbol,
+                                MethodSymbol("<initField>", emptyList(), null, null)
+                            )   // ldc2_w ...
+                        } else {
+                            // Real() → 0.0
+                            sb.append("    ldc2_w 0.0\n")
+                        }
+                        sb.append("    putfield ${classSymbol.name}/${vDecl.name} ${toJasminType(fieldType)}\n")
+
+                    } else if (typeName == "Bool") {
+                        sb.append("    aload_0\n")
+                        val arg = init.args.singleOrNull()
+                        if (arg != null) {
+                            generateExpr(
+                                sb,
+                                arg,
+                                classSymbol,
+                                MethodSymbol("<initField>", emptyList(), null, null)
+                            )   // iconst_0/1
+                        } else {
+                            // Bool() → false
+                            sb.append("    iconst_0\n")
+                        }
+                        sb.append("    putfield ${classSymbol.name}/${vDecl.name} ${toJasminType(fieldType)}\n")
+
+                    } else {
+                        // пользовательский класс: new Type(args) / invokespecial / putfield LType;
+                        sb.append("    aload_0\n")              // this
+                        sb.append("    new $typeName\n")
+                        sb.append("    dup\n")
+                        init.args.forEach { arg ->
+                            generateExpr(
+                                sb,
+                                arg,
+                                classSymbol,
+                                MethodSymbol("<initField>", emptyList(), null, null)
+                            )
+                        }
+                        val argsDesc = init.args.joinToString("") { "I" } // пока считаем все Integer
+                        sb.append("    invokespecial $typeName/<init>($argsDesc)V\n")
+                        sb.append("    putfield ${classSymbol.name}/${vDecl.name} ${toJasminType(fieldType)}\n")
+                    }
+                }
+
+                else -> {
+                    // при желании можно ещё отдельно обрабатывать IntLit/RealLit/BoolLit
+                }
+            }
+        }
+    }
+
 
     private fun generateMethods(
         sb: StringBuilder,
@@ -139,9 +242,8 @@ class JasminCodeGenerator(
             // пока делаем все методы public
             sb.append(".method public ${methodSymbol.name}($paramDesc)$returnDesc\n")
 
-            // TODO: .limit stack / .limit locals можно добавить позже (или довериться Jasminу, конечно да!)
-            // sb.append("    .limit stack 32\n")
-            // sb.append("    .limit locals 32\n")
+            sb.append("    .limit stack 32\n")
+            sb.append("    .limit locals 16\n")
 
             // 2. Тело метода, если оно есть
             methodDecl.body?.let { body ->
@@ -159,9 +261,33 @@ class JasminCodeGenerator(
             }
 
             sb.append(".end method\n\n")
+
+            if (className == "Program" &&
+                methodSymbol.name == "main" &&
+                methodSymbol.params.isEmpty() &&
+                returnDesc == "V"
+            ) {
+                generateJvmMainWrapper(sb, classSymbol, methodSymbol)
+            }
         }
     }
 
+    private fun generateJvmMainWrapper(
+        sb: StringBuilder,
+        classSymbol: ClassSymbol,
+        methodSymbol: MethodSymbol
+    ) {
+        sb.append(".method public static main([Ljava/lang/String;)V\n")
+        sb.append("    .limit stack 32\n")
+        sb.append("    .limit locals 16\n")
+
+        sb.append("    new ${classSymbol.name}\n")
+        sb.append("    dup\n")
+        sb.append("    invokespecial ${classSymbol.name}/<init>()V\n")
+        sb.append("    invokevirtual ${classSymbol.name}/${methodSymbol.name}()V\n")
+        sb.append("    return\n")
+        sb.append(".end method\n\n")
+    }
 
     private fun generateMethodBody(
         sb: StringBuilder,
@@ -375,27 +501,23 @@ class JasminCodeGenerator(
         classSymbol: ClassSymbol,
         methodSymbol: MethodSymbol
     ) {
-        // Типы аргументов — в идеале надо взять из семантики (getTypeOfExpr),
-        // но здесь можем использовать methodSymbol или classTable, если это вызов своего метода.
-
-        // Сначала receiver (если есть)
+        // 1. receiver и его тип
+        val receiverType: ClassName?
         if (call.receiver != null) {
             generateExpr(sb, call.receiver, classSymbol, methodSymbol)
+            receiverType = inferExprType(call.receiver, classSymbol, methodSymbol)
+        } else {
+            receiverType = null
         }
 
-        // Затем аргументы
-        call.args.forEach { arg ->
+        // 2. аргументы и их типы
+        val argTypes = call.args.map { arg ->
             generateExpr(sb, arg, classSymbol, methodSymbol)
+            inferExprType(arg, classSymbol, methodSymbol)
         }
 
-        // Разрешаем метод
-        // Если receiver == null → считаем, что это статический метод текущего класса
-        if (call.receiver == null) {
-            val argTypes: List<ClassName> = call.args.map { _ ->
-                // здесь по уму нужен тип из семантики, но для упрощения:
-                ClassName.Simple("Integer")
-            }
-
+        if (receiverType == null) {
+            // Вызов метода текущего класса как статического (упрощённо)
             val targetMethod = resolveMethodForCall(
                 ownerClass = classSymbol,
                 methodName = call.method,
@@ -407,13 +529,32 @@ class JasminCodeGenerator(
 
             sb.append("    invokestatic ${classSymbol.name}/${targetMethod.name}($argsDesc)$retDesc\n")
         } else {
-            // метод на объекте
-            val argTypes: List<ClassName> = call.args.map { ClassName.Simple("Integer") } // здесь тоже нужно взять реальные типы
+            // Вызов метода на объекте: receiver.method(args)
+            if (isBuiltin(receiverType)) {
+                // Сейчас предполагаем, что Integer/Real/Bool хранятся как JVM int,
+                // и Plus/Mult — это просто iadd/imul.
+                when (receiverType) {
+                    is ClassName.Simple -> when (receiverType.name) {
+                        "Integer" -> {
+                            when (call.method) {
+                                "Plus" -> {
+                                    // стек: [x, y] уже положили перед вызовом (receiver + args)
+                                    sb.append("    iadd\n")
+                                }
+                                "Mult" -> {
+                                    sb.append("    imul\n")
+                                }
+                                else -> error("Unknown Integer method '${call.method}'")
+                            }
+                        }
+                        else -> error("Builtin method calls for type '${receiverType.name}' not implemented")
+                    }
+                }
+                return
+            }
 
-            // тип receiver'а — тут по-хорошему вызывать семантический getTypeOfExpr
-            val recvType = ClassName.Simple(classSymbol.name)
-            val recvClass = classTable.getClass(recvType)
-                ?: error("Unknown receiver class for call: $recvType")
+            val recvClass = classTable.getClass(receiverType)
+                ?: error("Unknown receiver class for call: $receiverType")
 
             val targetMethod = resolveMethodForCall(
                 ownerClass = recvClass,
@@ -427,6 +568,59 @@ class JasminCodeGenerator(
             sb.append("    invokevirtual ${recvClass.name}/${targetMethod.name}($argsDesc)$retDesc\n")
         }
     }
+
+    private fun inferExprType(
+        expr: Expr,
+        classSymbol: ClassSymbol,
+        methodSymbol: MethodSymbol
+    ): ClassName {
+        return when (expr) {
+            is Expr.IntLit -> ClassName.Simple("Integer")
+            is Expr.RealLit -> ClassName.Simple("Real")
+            is Expr.BoolLit -> ClassName.Simple("Bool")
+
+            is Expr.This -> ClassName.Simple(classSymbol.name)
+
+            is Expr.Identifier -> {
+                val name = expr.name
+                // Сначала ищем среди локальных/параметров метода
+                methodSymbol.symbolTable.findSymbol(name)?.type
+                // Потом среди полей класса (с учётом наследования)
+                    ?: classSymbol.findField(name)?.type
+                    ?: ClassName.Simple("Unknown")
+            }
+
+            is Expr.FieldAccess -> {
+                // receiver.field
+                val recvType = inferExprType(expr.receiver, classSymbol, methodSymbol)
+                val recvClass = classTable.getClass(recvType)
+                    ?: return ClassName.Simple("Unknown")
+
+                recvClass.findField(expr.name)?.type ?: ClassName.Simple("Unknown")
+            }
+
+            is Expr.Call -> {
+                val receiverType: ClassName?
+                if (expr.receiver != null) {
+                    receiverType = inferExprType(expr.receiver, classSymbol, methodSymbol)
+                } else {
+                    receiverType = ClassName.Simple(classSymbol.name) // вызов метода своего класса
+                }
+
+                val ownerClass = classTable.getClass(receiverType)
+                    ?: return ClassName.Simple("Unknown")
+
+                // типы аргументов пока грубо считаем Unknown/Integer — тебе здесь важнее всего receiver
+                val argTypes = expr.args.map { inferExprType(it, classSymbol, methodSymbol) }
+
+                val targetMethod = resolveMethodForCall(ownerClass, expr.method, argTypes)
+                targetMethod.returnType ?: ClassName.Simple("Unknown")
+            }
+
+            is Expr.ClassNameExpr -> expr.cn
+        }
+    }
+
 
     private fun resolveMethodForCall(
         ownerClass: ClassSymbol,

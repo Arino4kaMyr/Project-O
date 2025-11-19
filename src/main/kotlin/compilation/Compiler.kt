@@ -12,7 +12,7 @@ class Compiler(
 ) {
 
     fun compile() {
-
+        generateJasminCode()
     }
 
     private fun generateJasminCode() {

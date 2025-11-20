@@ -14,5 +14,8 @@ end
 
 class Program is
   var counter : Counter()
+  
+  method main() is
+  end
 end
 

@@ -12,5 +12,8 @@ end
 
 class Program is
   var calc : Calculator()
+  
+  method main() is
+  end
 end
 

@@ -13,5 +13,8 @@ end
 
 class Program is
   var animal : Animal()
+  
+  method main() is
+  end
 end
 

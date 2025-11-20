@@ -15,5 +15,8 @@ end
 
 class Program is
   var p : Point()
+  
+  method main() is
+  end
 end
 

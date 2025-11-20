@@ -11,5 +11,8 @@ end
 
 class Program is
   var t : Test()
+  
+  method main() is
+  end
 end
 

@@ -11,5 +11,7 @@ class C extends A is
 end
 
 class Program is
+  method main() is
+  end
 end
 

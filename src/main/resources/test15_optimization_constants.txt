@@ -10,5 +10,8 @@ end
 
 class Program is
   var math : Math()
+
+  method main() is
+  end
 end
 

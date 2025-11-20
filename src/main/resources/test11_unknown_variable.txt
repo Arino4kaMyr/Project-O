@@ -8,5 +8,7 @@ class Test is
 end
 
 class Program is
+  method main() is
+  end
 end
 

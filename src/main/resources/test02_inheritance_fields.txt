@@ -14,5 +14,8 @@ end
 
 class Program is
   var dog : Dog()
+  
+  method main() is
+  end
 end
 

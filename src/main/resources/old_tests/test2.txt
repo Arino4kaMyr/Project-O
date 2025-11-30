@@ -16,5 +16,9 @@ end
 
 class Program is
   var m : Math()
-  var r : Integer(m.F(5))
+  var r : Integer()
+  method main() is
+    r := m.F(5)
+    print(r)
+  end
 end

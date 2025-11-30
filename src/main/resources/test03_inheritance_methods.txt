@@ -1,7 +1,7 @@
 # Test 03: Наследование методов
 
 class Animal is
-  method speak() : Integer is
+  method bark() : Integer is
     return (1)
   end
 end
@@ -14,8 +14,11 @@ end
 
 class Program is
   var dog : Dog()
+  var result : Integer()
   
   method main() is
+    result := dog.bark()
+    print(result)
   end
 end
 

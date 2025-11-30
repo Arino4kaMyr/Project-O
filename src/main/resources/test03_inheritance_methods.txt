@@ -14,8 +14,11 @@ end
 
 class Program is
   var dog : Dog()
+  var result : Integer()
   
   method main() is
+    result := dog.bark()
+    print(result)
   end
 end
 

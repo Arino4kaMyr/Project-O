@@ -3,7 +3,8 @@ class Math is
   this(el: Integer)
 
   method SquareSum(x: Integer, y: Integer) : Integer is
-    var sum : Integer(x.Plus(y))
+    var sum : Integer()
+    sum := x.Plus(y)
     return sum.Mult(sum)
   end
 end

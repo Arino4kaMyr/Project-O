@@ -331,6 +331,14 @@ class SemanticAnalyzer(private var program: Program) {
                     resolveExpr(receiver, symbolTable, classSymbol, className, methodName)
                 }
 
+                if (expr.receiver == null && expr.method in BUILDIN_METHODS) {
+                    // просто проверяем аргументы, что они корректные выражения
+                    expr.args.forEach { arg ->
+                        resolveExpr(arg, symbolTable, classSymbol, className, methodName)
+                    }
+                    return
+                }
+
                 // Проверяем вызов метода
                 if (expr.receiver == null) {
                     // Вызов метода без receiver - проверяем, что метод существует в классе
@@ -553,6 +561,11 @@ class SemanticAnalyzer(private var program: Program) {
                 }
 
                 if (expr.receiver == null) {
+                    // builtin methods: for example for print
+                    if (expr.method in BUILDIN_METHODS) {
+                        return ClassName.Simple("void")
+                    }
+
                     // Вызов метода без receiver - разрешение перегрузки
                     val method = resolveMethodCall(classSymbol, expr.method, argTypes, className)
 
@@ -1086,6 +1099,10 @@ class SemanticAnalyzer(private var program: Program) {
             }
             else -> {}
         }
+    }
+
+    companion object {
+        val BUILDIN_METHODS = setOf("print")
     }
 }
 

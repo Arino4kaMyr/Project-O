@@ -128,6 +128,25 @@ class SemanticAnalyzer(private var program: Program) {
                     }
                     val paramTypes = paramSymbols.map { it.type }
 
+                    // Проверка на переопределение метода родителя
+                    classSymbol.parentClass?.let { parent ->
+                        val overridden = parent.findMethodBySignature(member.name, paramTypes)
+                        if (overridden != null) {
+                            // Проверяем совместимость типов возвращаемых значений
+                            val parentReturn = overridden.returnType
+                            val childReturn = member.returnType
+
+                            if (parentReturn != null && childReturn != null) {
+                                if (!isAssignable(childReturn, parentReturn, classTable)) {
+                                    throw exceptions.SematicException(
+                                        "Return type of overriding method '${member.name}' in class '${classSymbol.name}' " +
+                                                "is not compatible with return type of parent method"
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                     // Проверка на дублирование сигнатуры метода (имя + типы параметров)
                     if (classSymbol.hasMethodWithSignature(member.name, paramTypes)) {
                         throw exceptions.SematicException(

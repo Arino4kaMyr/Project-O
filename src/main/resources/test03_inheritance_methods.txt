@@ -1,7 +1,7 @@
 # Test 03: Наследование методов
 
 class Animal is
-  method speak() : Integer is
+  method bark() : Integer is
     return (1)
   end
 end

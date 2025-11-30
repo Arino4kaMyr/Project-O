@@ -14,5 +14,6 @@ class Program is
 
   method main() is
     x := m.FoldAll()
+    print(x)
   end
 end

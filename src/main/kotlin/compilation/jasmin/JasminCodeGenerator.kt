@@ -327,9 +327,11 @@ class JasminCodeGenerator(
             is Stmt.ExprStmt -> {
                 // Просто вычисляем выражение, результат игнорируем (снимется за счёт последующих операций или оставим)
                 generateExpr(sb, stmt.expr, classSymbol, methodSymbol)
-                // Для простых случаев (например, вызов метода, который возвращает значение),
-                // можно явно снимать со стека инструкцией pop:
-                sb.append("    pop\n")
+                // Если у нас статический метод, который просто выполняется и ничему не присваевается
+                // то это просто void(например print) и для него не надо добавлять pop инструкцию
+                if (stmt.expr is Expr.Call && stmt.expr.receiver != null) {
+                    sb.append("    pop\n")
+                }
             }
 
             is Stmt.Assignment -> {
@@ -501,6 +503,31 @@ class JasminCodeGenerator(
         classSymbol: ClassSymbol,
         methodSymbol: MethodSymbol
     ) {
+        // 0. builtin-функции без receiver (print и т.п.)
+        if (call.receiver == null && call.method == "print") {
+            // пока поддерживаем только 1 аргумент
+            val arg = call.args.singleOrNull()
+                ?: error("print(...) with ${call.args.size} args is not supported yet")
+
+            // System.out
+            sb.append("    getstatic java/lang/System/out Ljava/io/PrintStream;\n")
+
+            // сгенерировать аргумент
+            generateExpr(sb, arg, classSymbol, methodSymbol)
+
+            // выбрать сигнатуру println по типу аргумента
+            val argType = inferExprType(arg, classSymbol, methodSymbol)
+            val desc = when ((argType as? ClassName.Simple)?.name) {
+                "Integer" -> "(I)V"
+                "Real"    -> "(D)V"
+                "Bool"    -> "(Z)V"
+                else      -> "(Ljava/lang/Object;)V"
+            }
+
+            sb.append("    invokevirtual java/io/PrintStream/println$desc\n")
+            return
+        }
+
         // 1. receiver и его тип
         val receiverType: ClassName?
         if (call.receiver != null) {

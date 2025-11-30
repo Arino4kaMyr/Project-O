@@ -26,8 +26,8 @@ class ClassSymbol(
      */
     fun findMethods(methodName: String): List<MethodSymbol> {
         val localMethods = methods[methodName] ?: emptyList()
-        val parentMethods = parentClass?.findMethods(methodName) ?: emptyList()
-        return localMethods + parentMethods
+        //val parentMethods = parentClass?.findMethods(methodName) ?: emptyList()
+        return localMethods //+ parentMethods
     }
 
     /**
@@ -50,6 +50,13 @@ class ClassSymbol(
                     type1 is ClassName.Simple && type2 is ClassName.Simple && type1.name == type2.name
                 }
             }
+        }
+    }
+
+    fun findMethodBySignature(name: String, paramTypes: List<ClassName>): MethodSymbol? {
+        val list = methods[name] ?: return null
+        return list.firstOrNull { m ->
+            m.params.map { it.type } == paramTypes
         }
     }
 

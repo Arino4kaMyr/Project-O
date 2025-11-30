@@ -342,7 +342,7 @@ class JasminCodeGenerator(
                 if (local != null) {
                     // expr → стек
                     generateExpr(sb, stmt.expr, classSymbol, methodSymbol)
-                    val index = methodSymbol.symbolTable.getIndex(name)
+                    val index = methodSymbol.symbolTable.getIndex(name) + 1
                     // считаем, что int/bool
                     sb.append("    istore $index\n")
                     return
@@ -403,7 +403,7 @@ class JasminCodeGenerator(
                 // 1. Локальная переменная / параметр?
                 val local = methodSymbol.symbolTable.findSymbol(name)
                 if (local != null) {
-                    val index = methodSymbol.symbolTable.getIndex(name)
+                    val index = methodSymbol.symbolTable.getIndex(name) + 1
                     // Сейчас считаем, что это int/bool → iload
                     sb.append("    iload $index\n")
                     return

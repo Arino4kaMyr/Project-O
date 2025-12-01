@@ -15,10 +15,16 @@ end
 class Program is
   var dog : Dog()
   var result : Integer()
+
+  var animal : Animal()
+  var result2 : Integer()
   
   method main() is
     result := dog.bark()
     print(result)
+
+    result2 := animal.bark()
+    print(result2)
   end
 end
 

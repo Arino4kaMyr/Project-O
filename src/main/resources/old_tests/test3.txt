@@ -1,7 +1,0 @@
-# Test 16: Отсутствие класса Program (ошибка)
-# Ожидается: Semantic Error - Program class doesn't exist
-
-class Test is
-  var x : Integer
-end
-

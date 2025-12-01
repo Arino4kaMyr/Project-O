@@ -48,7 +48,7 @@ fun main() {
 
         val compiler = Compiler(optimizedProgram, classTable)
         // run the program(transfer to jasmin files and execute them)
-        compiler.compile()
+        compiler.compileAndRun()
     } catch (e: SematicException) {
         println("\nSemantic Error: ${e.message}")
         exitProcess(1)

@@ -10,12 +10,20 @@ class Dog extends Animal is
   method getName() : Integer is
     return this.name
   end
+
+  method setName(x: Integer) is
+      this.name := x
+    end
 end
 
 class Program is
   var dog : Dog()
+  var y : Integer()
   
   method main() is
+    dog.setName(100)
+    y := dog.getName()
+    print(y)
   end
 end
 

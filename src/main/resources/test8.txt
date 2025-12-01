@@ -12,8 +12,18 @@ end
 
 class Program is
   var calc : Calculator()
+  var x : Integer(5)
+  var y : Integer(10)
+
+  var res1 : Integer()
+  var res2 : Integer()
   
   method main() is
+    res1 := calc.add(x)
+    res2 := calc.add(x, y)
+
+    print(res1)
+    print(res2)
   end
 end
 

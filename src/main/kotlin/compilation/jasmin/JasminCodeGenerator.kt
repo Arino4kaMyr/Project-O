@@ -49,10 +49,11 @@ class JasminCodeGenerator(
     ) {
 
         // Идём по полям класса из семантики
+        // Используем protected вместо private, чтобы дочерние классы могли обращаться к полям родителя
         classSymbol.fields.values.forEach { fieldSymbol ->
             val fieldName = fieldSymbol.name
             val jasminType = toJasminType(fieldSymbol.type)
-            sb.append(".field private $fieldName $jasminType\n")
+            sb.append(".field protected $fieldName $jasminType\n")
         }
 
         if (classSymbol.fields.isNotEmpty()) {
@@ -316,8 +317,15 @@ class JasminCodeGenerator(
                 // Если есть выражение: вернуть его значение
                 stmt.expr?.let { expr ->
                     generateExpr(sb, expr, classSymbol, methodSymbol)
-                    // Предположим, что пока работаем только с Integer → ireturn
-                    sb.append("    ireturn\n")
+                    // Используем правильную инструкцию возврата в зависимости от типа
+                    val returnType = methodSymbol.returnType
+                    val returnDesc = returnType?.let { toJasminType(it) } ?: "V"
+                    when (returnDesc) {
+                        "I", "Z" -> sb.append("    ireturn\n")  // Integer или Bool
+                        "D" -> sb.append("    dreturn\n")        // Real/Double
+                        "V" -> sb.append("    return\n")         // void
+                        else -> sb.append("    areturn\n")       // Object types
+                    }
                 } ?: run {
                     // return без значения, для void‑методов
                     sb.append("    return\n")
@@ -327,9 +335,14 @@ class JasminCodeGenerator(
             is Stmt.ExprStmt -> {
                 // Просто вычисляем выражение, результат игнорируем (снимется за счёт последующих операций или оставим)
                 generateExpr(sb, stmt.expr, classSymbol, methodSymbol)
-                // Если у нас статический метод, который просто выполняется и ничему не присваевается
-                // то это просто void(например print) и для него не надо добавлять pop инструкцию
-                if (stmt.expr is Expr.Call && stmt.expr.receiver != null) {
+                // Если выражение возвращает значение (не void), нужно убрать его со стека
+                val exprType = inferExprType(stmt.expr, classSymbol, methodSymbol)
+                // Проверяем, возвращает ли выражение значение (не void)
+                val returnsValue = when (exprType) {
+                    is ClassName.Simple -> exprType.name != "void" && exprType.name != "Void"
+                    else -> true
+                }
+                if (returnsValue) {
                     sb.append("    pop\n")
                 }
             }
@@ -337,26 +350,42 @@ class JasminCodeGenerator(
             is Stmt.Assignment -> {
                 val name = stmt.target
 
-                // Локал/параметр?
-                val local = methodSymbol.symbolTable.findSymbol(name)
-                if (local != null) {
-                    // expr → стек
-                    generateExpr(sb, stmt.expr, classSymbol, methodSymbol)
-                    val index = methodSymbol.symbolTable.getIndex(name) + 1
-                    // считаем, что int/bool
-                    sb.append("    istore $index\n")
-                    return
+                // Обработка this.field
+                val actualName = if (name.startsWith("this.")) {
+                    name.removePrefix("this.")
+                } else {
+                    name
                 }
 
-                // Поле класса?
-                val field = classSymbol.findField(name)
+                // Локал/параметр? (только если не this.field)
+                if (!name.startsWith("this.")) {
+                    val local = methodSymbol.symbolTable.findSymbol(name)
+                    if (local != null) {
+                        // expr → стек
+                        generateExpr(sb, stmt.expr, classSymbol, methodSymbol)
+                        val realIndex = getRealJvmIndex(name, methodSymbol)
+                        val jasminType = toJasminType(local.type)
+                        // Используем правильную инструкцию сохранения в зависимости от типа
+                        when (jasminType) {
+                            "I", "Z" -> sb.append("    istore $realIndex\n")  // Integer или Bool
+                            "D" -> sb.append("    dstore $realIndex\n")      // Real/Double
+                            else -> sb.append("    astore $realIndex\n")     // Object types
+                        }
+                        return
+                    }
+                }
+
+                // Поле класса? (с учетом this.)
+                val field = classSymbol.findField(actualName)
                 if (field != null) {
                     val jasminType = toJasminType(field.type)
                     // this.<field> := expr
                     // Надо: aload_0, expr, putfield
                     sb.append("    aload_0\n")
                     generateExpr(sb, stmt.expr, classSymbol, methodSymbol)
-                    sb.append("    putfield ${classSymbol.name}/${field.name} $jasminType\n")
+                    // Используем имя класса, где поле определено (может быть родительский класс)
+                    val fieldOwnerClass = findFieldOwnerClass(actualName, classSymbol)
+                    sb.append("    putfield ${fieldOwnerClass}/${field.name} $jasminType\n")
                     return
                 }
 
@@ -403,9 +432,14 @@ class JasminCodeGenerator(
                 // 1. Локальная переменная / параметр?
                 val local = methodSymbol.symbolTable.findSymbol(name)
                 if (local != null) {
-                    val index = methodSymbol.symbolTable.getIndex(name) + 1
-                    // Сейчас считаем, что это int/bool → iload
-                    sb.append("    iload $index\n")
+                    val realIndex = getRealJvmIndex(name, methodSymbol)
+                    val jasminType = toJasminType(local.type)
+                    // Используем правильную инструкцию загрузки в зависимости от типа
+                    when (jasminType) {
+                        "I", "Z" -> sb.append("    iload $realIndex\n")  // Integer или Bool
+                        "D" -> sb.append("    dload $realIndex\n")      // Real/Double
+                        else -> sb.append("    aload $realIndex\n")     // Object types
+                    }
                     return
                 }
 
@@ -434,15 +468,16 @@ class JasminCodeGenerator(
             is Expr.FieldAccess -> {
                 // если нет того к чему применяем метод,
                 generateExpr(sb, expr.receiver ?: Expr.This, classSymbol, methodSymbol)
-                val recvType: ClassName = /* здесь нужен тип receiver из семантики, сейчас можно взять ClassName.Simple(classSymbol.name) для this */
-                    ClassName.Simple(classSymbol.name)
+                val recvType: ClassName = inferExprType(expr.receiver ?: Expr.This, classSymbol, methodSymbol)
                 val recvClass = classTable.getClass(recvType)
                     ?: error("Unknown class for receiver in FieldAccess: $recvType")
 
                 val field = recvClass.findField(expr.name)
                     ?: error("Unknown field '${expr.name}' in class '${recvClass.name}'")
                 val jasminType = toJasminType(field.type)
-                sb.append("    getfield ${recvClass.name}/${field.name} $jasminType\n")
+                // Находим класс, где определено поле (может быть родительский класс)
+                val fieldOwnerClass = findFieldOwnerClass(expr.name, recvClass)
+                sb.append("    getfield ${fieldOwnerClass}/${field.name} $jasminType\n")
             }
 
             is Expr.ClassNameExpr -> {
@@ -558,8 +593,7 @@ class JasminCodeGenerator(
         } else {
             // Вызов метода на объекте: receiver.method(args)
             if (isBuiltin(receiverType)) {
-                // Сейчас предполагаем, что Integer/Real/Bool хранятся как JVM int,
-                // и Plus/Mult — это просто iadd/imul.
+                // Обработка встроенных методов для примитивных типов
                 when (receiverType) {
                     is ClassName.Simple -> when (receiverType.name) {
                         "Integer" -> {
@@ -573,6 +607,21 @@ class JasminCodeGenerator(
                                 }
                                 else -> error("Unknown Integer method '${call.method}'")
                             }
+                        }
+                        "Real" -> {
+                            when (call.method) {
+                                "Plus" -> {
+                                    // стек: [x, y] уже положили перед вызовом (receiver + args)
+                                    sb.append("    dadd\n")
+                                }
+                                "Mult" -> {
+                                    sb.append("    dmul\n")
+                                }
+                                else -> error("Unknown Real method '${call.method}'")
+                            }
+                        }
+                        "Bool" -> {
+                            error("Builtin method calls for type 'Bool' not implemented")
                         }
                         else -> error("Builtin method calls for type '${receiverType.name}' not implemented")
                     }
@@ -627,6 +676,11 @@ class JasminCodeGenerator(
             }
 
             is Expr.Call -> {
+                // Проверка на встроенные методы (print и т.п.)
+                if (expr.receiver == null && expr.method == "print") {
+                    return ClassName.Simple("void")
+                }
+
                 val receiverType: ClassName?
                 if (expr.receiver != null) {
                     receiverType = inferExprType(expr.receiver, classSymbol, methodSymbol)
@@ -641,13 +695,86 @@ class JasminCodeGenerator(
                 val argTypes = expr.args.map { inferExprType(it, classSymbol, methodSymbol) }
 
                 val targetMethod = resolveMethodForCall(ownerClass, expr.method, argTypes)
-                targetMethod.returnType ?: ClassName.Simple("Unknown")
+                targetMethod.returnType ?: ClassName.Simple("void")
             }
 
             is Expr.ClassNameExpr -> expr.cn
         }
     }
 
+    /**
+     * Найти класс, где определено поле (с учетом наследования)
+     */
+    private fun findFieldOwnerClass(fieldName: String, classSymbol: ClassSymbol): String {
+        // Сначала проверяем текущий класс
+        if (fieldName in classSymbol.fields) {
+            return classSymbol.name
+        }
+        // Если не найдено, ищем в родительских классах
+        var current = classSymbol.parentClass
+        while (current != null) {
+            if (fieldName in current.fields) {
+                return current.name
+            }
+            current = current.parentClass
+        }
+        // Если не нашли, возвращаем имя текущего класса (для ошибок)
+        return classSymbol.name
+    }
+
+    /**
+     * Вычислить реальный JVM слот индекс с учетом размеров типов
+     * В JVM: this (1 слот) + параметры (с учетом размеров) + локальные переменные (с учетом размеров)
+     */
+    private fun getRealJvmIndex(
+        variableName: String,
+        methodSymbol: MethodSymbol
+    ): Int {
+        val logicalIndex = methodSymbol.symbolTable.getIndex(variableName)
+        
+        // Начинаем с 1 (для this в нестатических методах)
+        var realIndex = 1
+        
+        // Сначала обрабатываем параметры в порядке их объявления
+        methodSymbol.params.forEachIndexed { paramIndex, param ->
+            if (paramIndex < logicalIndex) {
+                // Это параметр, который идет раньше нашей переменной
+                realIndex += getJvmSlotSize(param.type)
+            } else if (paramIndex == logicalIndex && param.name == variableName) {
+                // Это наш параметр
+                return realIndex
+            }
+        }
+        
+        // Если переменная - параметр, мы уже вернулись
+        // Теперь обрабатываем локальные переменные
+        // Локальные переменные идут после параметров, их логический индекс начинается с params.size
+        val paramCount = methodSymbol.params.size
+        if (logicalIndex >= paramCount) {
+            // Это локальная переменная
+            // Сначала суммируем размеры всех параметров
+            methodSymbol.params.forEach { param ->
+                realIndex += getJvmSlotSize(param.type)
+            }
+            
+            // Теперь проходим по всем локальным переменным до нашей
+            val allSymbols = methodSymbol.symbolTable.getAllSymbols()
+            allSymbols.forEach { (name, symbol) ->
+                // Пропускаем параметры
+                val isParam = methodSymbol.params.any { it.name == name }
+                if (!isParam) {
+                    val varLogicalIndex = methodSymbol.symbolTable.getIndex(name)
+                    if (varLogicalIndex < logicalIndex) {
+                        realIndex += getJvmSlotSize(symbol.type)
+                    } else if (varLogicalIndex == logicalIndex && name == variableName) {
+                        return realIndex
+                    }
+                }
+            }
+        }
+        
+        return realIndex
+    }
 
     private fun resolveMethodForCall(
         ownerClass: ClassSymbol,

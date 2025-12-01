@@ -32,3 +32,16 @@ fun numberToJasmin(value: Long): String {
 fun isBuiltin(type: ClassName): Boolean =
     type is ClassName.Simple && type.name in listOf("Integer", "Real", "Bool")
 
+/**
+ * Получить размер типа в слотах JVM
+ */
+fun getJvmSlotSize(type: ClassName): Int {
+    return when (type) {
+        is ClassName.Simple -> when (type.name) {
+            "Real", "Double" -> 2  // double занимает 2 слота
+            "Integer", "Int", "Bool", "Boolean" -> 1  // int, boolean - 1 слот
+            else -> 1  // Object types - 1 слот (reference)
+        }
+    }
+}
+

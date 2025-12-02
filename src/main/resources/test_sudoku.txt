@@ -1,0 +1,593 @@
+# Тест: Алгоритм решения судоку 9x9
+# Адаптация Python алгоритма с использованием циклов и итеративного подхода
+# Использует вложенные циклы для перебора всех клеток и проверки правил судоку
+
+class Sudoku is
+  # Сетка 9x9 (81 клетка) - используем отдельные поля
+  # Строка 0
+  var r0c0 : Integer
+  var r0c1 : Integer
+  var r0c2 : Integer
+  var r0c3 : Integer
+  var r0c4 : Integer
+  var r0c5 : Integer
+  var r0c6 : Integer
+  var r0c7 : Integer
+  var r0c8 : Integer
+  # Строка 1
+  var r1c0 : Integer
+  var r1c1 : Integer
+  var r1c2 : Integer
+  var r1c3 : Integer
+  var r1c4 : Integer
+  var r1c5 : Integer
+  var r1c6 : Integer
+  var r1c7 : Integer
+  var r1c8 : Integer
+  # Строка 2
+  var r2c0 : Integer
+  var r2c1 : Integer
+  var r2c2 : Integer
+  var r2c3 : Integer
+  var r2c4 : Integer
+  var r2c5 : Integer
+  var r2c6 : Integer
+  var r2c7 : Integer
+  var r2c8 : Integer
+  # Строка 3
+  var r3c0 : Integer
+  var r3c1 : Integer
+  var r3c2 : Integer
+  var r3c3 : Integer
+  var r3c4 : Integer
+  var r3c5 : Integer
+  var r3c6 : Integer
+  var r3c7 : Integer
+  var r3c8 : Integer
+  # Строка 4
+  var r4c0 : Integer
+  var r4c1 : Integer
+  var r4c2 : Integer
+  var r4c3 : Integer
+  var r4c4 : Integer
+  var r4c5 : Integer
+  var r4c6 : Integer
+  var r4c7 : Integer
+  var r4c8 : Integer
+  # Строка 5
+  var r5c0 : Integer
+  var r5c1 : Integer
+  var r5c2 : Integer
+  var r5c3 : Integer
+  var r5c4 : Integer
+  var r5c5 : Integer
+  var r5c6 : Integer
+  var r5c7 : Integer
+  var r5c8 : Integer
+  # Строка 6
+  var r6c0 : Integer
+  var r6c1 : Integer
+  var r6c2 : Integer
+  var r6c3 : Integer
+  var r6c4 : Integer
+  var r6c5 : Integer
+  var r6c6 : Integer
+  var r6c7 : Integer
+  var r6c8 : Integer
+  # Строка 7
+  var r7c0 : Integer
+  var r7c1 : Integer
+  var r7c2 : Integer
+  var r7c3 : Integer
+  var r7c4 : Integer
+  var r7c5 : Integer
+  var r7c6 : Integer
+  var r7c7 : Integer
+  var r7c8 : Integer
+  # Строка 8
+  var r8c0 : Integer
+  var r8c1 : Integer
+  var r8c2 : Integer
+  var r8c3 : Integer
+  var r8c4 : Integer
+  var r8c5 : Integer
+  var r8c6 : Integer
+  var r8c7 : Integer
+  var r8c8 : Integer
+
+  # Инициализация тестовой сетки (пример пустой)
+  method init() is
+    r0c0 := 0
+    r0c1 := 8
+    r0c2 := 5
+    r0c3 := 0
+    r0c4 := 0
+    r0c5 := 0
+    r0c6 := 0
+    r0c7 := 0
+    r0c8 := 1
+    r1c0 := 1
+    r1c1 := 7
+    r1c2 := 0
+    r1c3 := 0
+    r1c4 := 6
+    r1c5 := 4
+    r1c6 := 8
+    r1c7 := 0
+    r1c8 := 0
+    r2c0 := 0
+    r2c1 := 0
+    r2c2 := 9
+    r2c3 := 1
+    r2c4 := 0
+    r2c5 := 0
+    r2c6 := 3
+    r2c7 := 7
+    r2c8 := 2
+    r3c0 := 6
+    r3c1 := 2
+    r3c2 := 1
+    r3c3 := 0
+    r3c4 := 5
+    r3c5 := 0
+    r3c6 := 7
+    r3c7 := 3
+    r3c8 := 0
+    r4c0 := 8
+    r4c1 := 0
+    r4c2 := 0
+    r4c3 := 7
+    r4c4 := 0
+    r4c5 := 0
+    r4c6 := 1
+    r4c7 := 6
+    r4c8 := 9
+    r5c0 := 0
+    r5c1 := 0
+    r5c2 := 7
+    r5c3 := 6
+    r5c4 := 1
+    r5c5 := 0
+    r5c6 := 0
+    r5c7 := 0
+    r5c8 := 0
+    r6c0 := 0
+    r6c1 := 1
+    r6c2 := 0
+    r6c3 := 0
+    r6c4 := 0
+    r6c5 := 9
+    r6c6 := 5
+    r6c7 := 0
+    r6c8 := 7
+    r7c0 := 7
+    r7c1 := 0
+    r7c2 := 0
+    r7c3 := 0
+    r7c4 := 2
+    r7c5 := 6
+    r7c6 := 0
+    r7c7 := 1
+    r7c8 := 3
+    r8c0 := 0
+    r8c1 := 3
+    r8c2 := 4
+    r8c3 := 8
+    r8c4 := 0
+    r8c5 := 1
+    r8c6 := 0
+    r8c7 := 0
+    r8c8 := 0
+  end
+
+  # Получить значение клетки по координатам
+  method getCell(row: Integer, col: Integer) : Integer is
+    if row.Equal(0) then
+      if col.Equal(0) then return r0c0 end
+      if col.Equal(1) then return r0c1 end
+      if col.Equal(2) then return r0c2 end
+      if col.Equal(3) then return r0c3 end
+      if col.Equal(4) then return r0c4 end
+      if col.Equal(5) then return r0c5 end
+      if col.Equal(6) then return r0c6 end
+      if col.Equal(7) then return r0c7 end
+      if col.Equal(8) then return r0c8 end
+    end
+    if row.Equal(1) then
+      if col.Equal(0) then return r1c0 end
+      if col.Equal(1) then return r1c1 end
+      if col.Equal(2) then return r1c2 end
+      if col.Equal(3) then return r1c3 end
+      if col.Equal(4) then return r1c4 end
+      if col.Equal(5) then return r1c5 end
+      if col.Equal(6) then return r1c6 end
+      if col.Equal(7) then return r1c7 end
+      if col.Equal(8) then return r1c8 end
+    end
+    if row.Equal(2) then
+      if col.Equal(0) then return r2c0 end
+      if col.Equal(1) then return r2c1 end
+      if col.Equal(2) then return r2c2 end
+      if col.Equal(3) then return r2c3 end
+      if col.Equal(4) then return r2c4 end
+      if col.Equal(5) then return r2c5 end
+      if col.Equal(6) then return r2c6 end
+      if col.Equal(7) then return r2c7 end
+      if col.Equal(8) then return r2c8 end
+    end
+    if row.Equal(3) then
+      if col.Equal(0) then return r3c0 end
+      if col.Equal(1) then return r3c1 end
+      if col.Equal(2) then return r3c2 end
+      if col.Equal(3) then return r3c3 end
+      if col.Equal(4) then return r3c4 end
+      if col.Equal(5) then return r3c5 end
+      if col.Equal(6) then return r3c6 end
+      if col.Equal(7) then return r3c7 end
+      if col.Equal(8) then return r3c8 end
+    end
+    if row.Equal(4) then
+      if col.Equal(0) then return r4c0 end
+      if col.Equal(1) then return r4c1 end
+      if col.Equal(2) then return r4c2 end
+      if col.Equal(3) then return r4c3 end
+      if col.Equal(4) then return r4c4 end
+      if col.Equal(5) then return r4c5 end
+      if col.Equal(6) then return r4c6 end
+      if col.Equal(7) then return r4c7 end
+      if col.Equal(8) then return r4c8 end
+    end
+    if row.Equal(5) then
+      if col.Equal(0) then return r5c0 end
+      if col.Equal(1) then return r5c1 end
+      if col.Equal(2) then return r5c2 end
+      if col.Equal(3) then return r5c3 end
+      if col.Equal(4) then return r5c4 end
+      if col.Equal(5) then return r5c5 end
+      if col.Equal(6) then return r5c6 end
+      if col.Equal(7) then return r5c7 end
+      if col.Equal(8) then return r5c8 end
+    end
+    if row.Equal(6) then
+      if col.Equal(0) then return r6c0 end
+      if col.Equal(1) then return r6c1 end
+      if col.Equal(2) then return r6c2 end
+      if col.Equal(3) then return r6c3 end
+      if col.Equal(4) then return r6c4 end
+      if col.Equal(5) then return r6c5 end
+      if col.Equal(6) then return r6c6 end
+      if col.Equal(7) then return r6c7 end
+      if col.Equal(8) then return r6c8 end
+    end
+    if row.Equal(7) then
+      if col.Equal(0) then return r7c0 end
+      if col.Equal(1) then return r7c1 end
+      if col.Equal(2) then return r7c2 end
+      if col.Equal(3) then return r7c3 end
+      if col.Equal(4) then return r7c4 end
+      if col.Equal(5) then return r7c5 end
+      if col.Equal(6) then return r7c6 end
+      if col.Equal(7) then return r7c7 end
+      if col.Equal(8) then return r7c8 end
+    end
+    if row.Equal(8) then
+      if col.Equal(0) then return r8c0 end
+      if col.Equal(1) then return r8c1 end
+      if col.Equal(2) then return r8c2 end
+      if col.Equal(3) then return r8c3 end
+      if col.Equal(4) then return r8c4 end
+      if col.Equal(5) then return r8c5 end
+      if col.Equal(6) then return r8c6 end
+      if col.Equal(7) then return r8c7 end
+      if col.Equal(8) then return r8c8 end
+    end
+    return 0
+  end
+
+  # Установить значение клетки по координатам
+  method setCell(row: Integer, col: Integer, num: Integer) is
+    if row.Equal(0) then
+      if col.Equal(0) then r0c0 := num end
+      if col.Equal(1) then r0c1 := num end
+      if col.Equal(2) then r0c2 := num end
+      if col.Equal(3) then r0c3 := num end
+      if col.Equal(4) then r0c4 := num end
+      if col.Equal(5) then r0c5 := num end
+      if col.Equal(6) then r0c6 := num end
+      if col.Equal(7) then r0c7 := num end
+      if col.Equal(8) then r0c8 := num end
+    end
+    if row.Equal(1) then
+      if col.Equal(0) then r1c0 := num end
+      if col.Equal(1) then r1c1 := num end
+      if col.Equal(2) then r1c2 := num end
+      if col.Equal(3) then r1c3 := num end
+      if col.Equal(4) then r1c4 := num end
+      if col.Equal(5) then r1c5 := num end
+      if col.Equal(6) then r1c6 := num end
+      if col.Equal(7) then r1c7 := num end
+      if col.Equal(8) then r1c8 := num end
+    end
+    if row.Equal(2) then
+      if col.Equal(0) then r2c0 := num end
+      if col.Equal(1) then r2c1 := num end
+      if col.Equal(2) then r2c2 := num end
+      if col.Equal(3) then r2c3 := num end
+      if col.Equal(4) then r2c4 := num end
+      if col.Equal(5) then r2c5 := num end
+      if col.Equal(6) then r2c6 := num end
+      if col.Equal(7) then r2c7 := num end
+      if col.Equal(8) then r2c8 := num end
+    end
+    if row.Equal(3) then
+      if col.Equal(0) then r3c0 := num end
+      if col.Equal(1) then r3c1 := num end
+      if col.Equal(2) then r3c2 := num end
+      if col.Equal(3) then r3c3 := num end
+      if col.Equal(4) then r3c4 := num end
+      if col.Equal(5) then r3c5 := num end
+      if col.Equal(6) then r3c6 := num end
+      if col.Equal(7) then r3c7 := num end
+      if col.Equal(8) then r3c8 := num end
+    end
+    if row.Equal(4) then
+      if col.Equal(0) then r4c0 := num end
+      if col.Equal(1) then r4c1 := num end
+      if col.Equal(2) then r4c2 := num end
+      if col.Equal(3) then r4c3 := num end
+      if col.Equal(4) then r4c4 := num end
+      if col.Equal(5) then r4c5 := num end
+      if col.Equal(6) then r4c6 := num end
+      if col.Equal(7) then r4c7 := num end
+      if col.Equal(8) then r4c8 := num end
+    end
+    if row.Equal(5) then
+      if col.Equal(0) then r5c0 := num end
+      if col.Equal(1) then r5c1 := num end
+      if col.Equal(2) then r5c2 := num end
+      if col.Equal(3) then r5c3 := num end
+      if col.Equal(4) then r5c4 := num end
+      if col.Equal(5) then r5c5 := num end
+      if col.Equal(6) then r5c6 := num end
+      if col.Equal(7) then r5c7 := num end
+      if col.Equal(8) then r5c8 := num end
+    end
+    if row.Equal(6) then
+      if col.Equal(0) then r6c0 := num end
+      if col.Equal(1) then r6c1 := num end
+      if col.Equal(2) then r6c2 := num end
+      if col.Equal(3) then r6c3 := num end
+      if col.Equal(4) then r6c4 := num end
+      if col.Equal(5) then r6c5 := num end
+      if col.Equal(6) then r6c6 := num end
+      if col.Equal(7) then r6c7 := num end
+      if col.Equal(8) then r6c8 := num end
+    end
+    if row.Equal(7) then
+      if col.Equal(0) then r7c0 := num end
+      if col.Equal(1) then r7c1 := num end
+      if col.Equal(2) then r7c2 := num end
+      if col.Equal(3) then r7c3 := num end
+      if col.Equal(4) then r7c4 := num end
+      if col.Equal(5) then r7c5 := num end
+      if col.Equal(6) then r7c6 := num end
+      if col.Equal(7) then r7c7 := num end
+      if col.Equal(8) then r7c8 := num end
+    end
+    if row.Equal(8) then
+      if col.Equal(0) then r8c0 := num end
+      if col.Equal(1) then r8c1 := num end
+      if col.Equal(2) then r8c2 := num end
+      if col.Equal(3) then r8c3 := num end
+      if col.Equal(4) then r8c4 := num end
+      if col.Equal(5) then r8c5 := num end
+      if col.Equal(6) then r8c6 := num end
+      if col.Equal(7) then r8c7 := num end
+      if col.Equal(8) then r8c8 := num end
+    end
+  end
+
+  # Проверка, можно ли поставить число d в клетку (r, c)
+  # Адаптация функции can_place из Python
+  method canPlace(r: Integer, c: Integer, d: Integer) : Bool is
+    var i : Integer
+    
+    # Проверка строки: перебираем все столбцы
+    i := 0
+    while i.Less(9) loop
+      if i.NotEqual(c) then
+        if this.getCell(r, i).Equal(d) then
+          return false
+        end
+      end
+      i := i.Plus(1)
+    end
+    
+    # Проверка столбца: перебираем все строки
+    i := 0
+    while i.Less(9) loop
+      if i.NotEqual(r) then
+        if this.getCell(i, c).Equal(d) then
+          return false
+        end
+      end
+      i := i.Plus(1)
+    end
+    
+    # Проверка блока 3x3
+    var br : Integer
+    var bc : Integer
+    var j : Integer
+    
+    # br = 3 * (r // 3), bc = 3 * (c // 3)
+    if r.Less(3) then
+      br := 0
+    else
+      if r.Less(6) then
+        br := 3
+      else
+        br := 6
+      end
+    end
+    
+    if c.Less(3) then
+      bc := 0
+    else
+      if c.Less(6) then
+        bc := 3
+      else
+        bc := 6
+      end
+    end
+    
+    # Перебираем все клетки в блоке 3x3
+    i := br
+    while i.Less(br.Plus(3)) loop
+      j := bc
+      while j.Less(bc.Plus(3)) loop
+        if i.NotEqual(r) then
+          if this.getCell(i, j).Equal(d) then
+            return false
+          end
+        else
+          if j.NotEqual(c) then
+            if this.getCell(i, j).Equal(d) then
+              return false
+            end
+          end
+        end
+        j := j.Plus(1)
+      end
+      i := i.Plus(1)
+    end
+    
+    return true
+  end
+
+  # Найти первую пустую клетку (возвращает -1, -1 если не найдена)
+  method findEmpty() : Integer is
+    var r : Integer
+    var c : Integer
+    
+    r := 0
+    while r.Less(9) loop
+      c := 0
+      while c.Less(9) loop
+        if this.getCell(r, c).Equal(0) then
+          # Возвращаем индекс: r * 9 + c
+          return r.Mult(9).Plus(c)
+        end
+        c := c.Plus(1)
+      end
+      r := r.Plus(1)
+    end
+    
+    return -1
+  end
+
+  # Решение судоку: упрощенный итеративный алгоритм
+  # Перебираем все клетки и заполняем их
+  method solve() : Bool is
+    var r : Integer
+    var c : Integer
+    var d : Integer
+    var cellValue : Integer
+    var found : Bool
+    var iterations : Integer
+    var changed : Bool    
+    # Повторяем процесс несколько раз до полного заполнения
+    iterations := 0
+    while iterations.Less(100) loop
+      changed := false
+      
+      # Перебираем все клетки
+      r := 0
+      while r.Less(9) loop
+        c := 0
+        while c.Less(9) loop
+          cellValue := this.getCell(r, c)
+          
+          # Если клетка пустая, пытаемся заполнить
+          if cellValue.Equal(0) then
+            # Пробуем цифры 1..9
+            d := 1
+            found := false
+            while d.Less(10) loop
+              if this.canPlace(r, c, d) then
+                # Проверяем, что только одно число подходит (упрощение)
+                if found.Equal(false) then
+                  this.setCell(r, c, d)
+                  found := true
+                  changed := true
+                else
+                  # Если несколько чисел подходят, пропускаем
+                  found := false
+                  this.setCell(r, c, 0)
+                  d := 10
+                end
+              end
+              d := d.Plus(1)
+            end
+          end
+          
+          c := c.Plus(1)
+        end
+        r := r.Plus(1)
+      end
+      
+      # Если ничего не изменилось, останавливаемся
+      if changed.Equal(false) then
+        iterations := 100
+      else
+        iterations := iterations.Plus(1)
+      end
+    end
+    
+    # Проверяем, все ли клетки заполнены
+    r := 0
+    while r.Less(9) loop
+      c := 0
+      while c.Less(9) loop
+        if this.getCell(r, c).Equal(0) then
+          return false
+        end
+        c := c.Plus(1)
+      end
+      r := r.Plus(1)
+    end
+    
+    return true
+  end
+
+  # Вывод сетки построчно с использованием циклов
+  method show() is
+    var r : Integer
+    var c : Integer
+    var val : Integer
+    
+    r := 0
+    while r.Less(9) loop
+      c := 0
+      while c.Less(9) loop
+        val := this.getCell(r, c)
+        print(val)
+        c := c.Plus(1)
+      end
+      r := r.Plus(1)
+    end
+  end
+end
+
+class Program is
+  var sudoku : Sudoku()
+  
+  method main() is
+    sudoku.init()
+    print(100)
+    sudoku.show()
+    
+    sudoku.solve()
+    print(200)
+    sudoku.show()
+  end
+end

@@ -1,0 +1,65 @@
+# Тест Integer - арифметика, сравнения, конвертации
+class Program is
+  method main() is
+    print(1000)
+    var a : Integer(5)
+    var b : Integer(3)
+    
+    # Арифметические операции Integer
+    var sum : Integer()
+    sum := a.Plus(b)  # 8
+    print(sum)
+    var diff : Integer()
+    diff := a.Minus(b)  # 2
+    print(diff)
+    var prod : Integer()
+    prod := a.Mult(b)  # 15
+    print(prod)
+    var quot : Integer()
+    quot := a.Div(b)  # 1 (5/3 = 1)
+    print(quot)
+    var rem : Integer()
+    rem := a.Rem(b)  # 2 (5%3 = 2)
+    print(rem)
+    
+    # Унарный минус
+    var neg : Integer()
+    neg := a.UnaryMinus()  # -5
+    print(neg)
+    
+    # Сравнения Integer
+    var eq : Bool()
+    eq := a.Equal(b)  # false
+    print(eq)
+    var ne : Bool()
+    ne := a.NotEqual(b)  # true
+    print(ne)
+    var lt : Bool()
+    lt := a.Less(b)  # false
+    print(lt)
+    var gt : Bool()
+    gt := a.Greater(b)  # true
+    print(gt)
+    var le : Bool()
+    le := a.LessEqual(b)  # false
+    print(le)
+    var ge : Bool()
+    ge := a.GreaterEqual(b)  # true
+    print(ge)
+    
+    # Конвертации Integer
+    var real_from_int : Real()
+    real_from_int := a.toReal()  # 5.0
+    print(real_from_int)
+    var bool_from_int : Bool()
+    bool_from_int := a.toBoolean()  # true (не 0)
+    print(bool_from_int)
+    var zero : Integer(0)
+    var bool_from_zero : Bool()
+    bool_from_zero := zero.toBoolean()  # false
+    print(bool_from_zero)
+    
+    print(9999)
+  end
+end
+

@@ -79,6 +79,12 @@ class SemanticAnalyzer(private var program: Program) {
                         // Связываем родительский класс
                         classSymbol.parentClass = parentClass
                     }
+                    is ClassName.Generic -> {
+                        // Дженерики в наследовании пока не поддерживаются
+                        throw exceptions.SematicException(
+                            "Generic types in inheritance are not supported yet: ${parentName.name}[...]"
+                        )
+                    }
                 }
             }
         }
@@ -108,7 +114,7 @@ class SemanticAnalyzer(private var program: Program) {
                     }
 
                     // Поле класса - добавляем в таблицу полей класса
-                    val varType = extractTypeFromInit(member.init)
+                    val varType = member.type
                     val fieldSymbol = VarSymbol(member.name, varType)
                     classSymbol.fields[member.name] = fieldSymbol
                 }
@@ -206,7 +212,7 @@ class SemanticAnalyzer(private var program: Program) {
                         )
                     }
 
-                    val varType = extractTypeFromInit(varDecl.init)
+                    val varType = varDecl.type
                     symbolTable.addLocalVariable(varDecl.name, varType)
                 }
                 
@@ -360,12 +366,15 @@ class SemanticAnalyzer(private var program: Program) {
 
                 // Проверяем вызов метода
                 if (expr.receiver == null) {
-                    // Вызов метода без receiver - проверяем, что метод существует в классе
-                    val methods = classSymbol.findMethods(expr.method)
-                    if (methods.isEmpty()) {
-                        throw exceptions.SematicException(
-                            "Unknown method '${expr.method}' in class '${className}'"
-                        )
+                    // Проверяем, не является ли это встроенным методом (еще раз, на всякий случай)
+                    if (expr.method !in BUILDIN_METHODS) {
+                        // Вызов метода без receiver - проверяем, что метод существует в классе
+                        val methods = classSymbol.findMethods(expr.method)
+                        if (methods.isEmpty()) {
+                            throw exceptions.SematicException(
+                                "Unknown method '${expr.method}' in class '${className}'"
+                            )
+                        }
                     }
                 }
                 // Если receiver есть, проверка метода будет на этапе проверки типов
@@ -574,19 +583,29 @@ class SemanticAnalyzer(private var program: Program) {
                 ClassName.Simple(className)
             }
             is Expr.Call -> {
+                // Проверяем встроенные методы СРАЗУ, до любых других проверок
+                if (expr.receiver == null && expr.method in BUILDIN_METHODS) {
+                    // Получаем типы аргументов для проверки
+                    expr.args.forEach { arg ->
+                        getTypeOfExpr(arg, symbolTable, classSymbol, className, methodName)
+                    }
+                    return ClassName.Simple("void")
+                }
+                
                 // Получаем типы аргументов
                 val argTypes = expr.args.map { arg ->
                     getTypeOfExpr(arg, symbolTable, classSymbol, className, methodName)
                 }
 
                 if (expr.receiver == null) {
-                    // builtin methods: for example for print
+                    // Проверяем, не является ли это встроенным методом (явная проверка для надежности)
                     if (expr.method in BUILDIN_METHODS) {
                         return ClassName.Simple("void")
                     }
 
                     // Вызов метода без receiver - разрешение перегрузки
-                    val method = resolveMethodCall(classSymbol, expr.method, argTypes, className)
+                    // callerClass = classSymbol (вызываем из того же класса)
+                    val method = resolveMethodCall(classSymbol, expr.method, argTypes, className, callerClass = classSymbol)
 
                     method.returnType ?: ClassName.Simple("void")
                 } else {
@@ -595,13 +614,21 @@ class SemanticAnalyzer(private var program: Program) {
                     val receiverClass = classTable.getClass(receiverType)
 
                     if (receiverClass == null) {
-                        // Встроенный тип (Array, Integer, etc.) - пропускаем проверку методов
-                        // Возвращаем Unknown, так как не можем определить тип
+                        // Встроенный тип (Integer, Real, Bool, Array) - определяем тип возврата
+                        val receiverTypeName = when (receiverType) {
+                            is ClassName.Simple -> receiverType.name
+                            is ClassName.Generic -> receiverType.name  // Array
+                        }
+                        if (receiverTypeName != null) {
+                            val argType = if (argTypes.isNotEmpty()) argTypes[0] else null
+                            return getBuiltinMethodReturnType(receiverType, receiverTypeName, expr.method, argType)
+                        }
                         return ClassName.Simple("Unknown")
                     }
 
                     // Разрешение перегрузки для метода с receiver
-                    val method = resolveMethodCall(receiverClass, expr.method, argTypes, receiverClass.name)
+                    // callerClass = classSymbol (класс, из которого вызывается метод)
+                    val method = resolveMethodCall(receiverClass, expr.method, argTypes, receiverClass.name, callerClass = classSymbol)
 
                     method.returnType ?: ClassName.Simple("void")
                 }
@@ -692,6 +719,9 @@ class SemanticAnalyzer(private var program: Program) {
                     return true  // Unknown можно присвоить любому типу
                 }
             }
+            is ClassName.Generic -> {
+                // Для дженериков проверяем совместимость позже
+            }
         }
 
         when (toType) {
@@ -699,6 +729,9 @@ class SemanticAnalyzer(private var program: Program) {
                 if (toType.name == "Unknown") {
                     return true  // Любой тип можно присвоить Unknown
                 }
+            }
+            is ClassName.Generic -> {
+                // Для дженериков проверяем совместимость позже
             }
         }
 
@@ -713,7 +746,25 @@ class SemanticAnalyzer(private var program: Program) {
                             return fromClass.isSubclassOf(toClass)
                         }
                     }
+                    is ClassName.Generic -> {
+                        // Дженерики не могут наследоваться от обычных классов
+                        return false
+                    }
                 }
+            }
+            is ClassName.Generic -> {
+                // Дженерики могут быть присвоены только дженерикам того же типа
+                if (toType is ClassName.Generic) {
+                    // Проверяем базовый тип и типы аргументов
+                    if (fromType.name == toType.name && 
+                        fromType.typeArgs.size == toType.typeArgs.size) {
+                        // Проверяем совместимость типов аргументов
+                        return fromType.typeArgs.zip(toType.typeArgs).all { (from, to) ->
+                            isAssignable(from, to, classTable)
+                        }
+                    }
+                }
+                return false
             }
         }
 
@@ -721,11 +772,16 @@ class SemanticAnalyzer(private var program: Program) {
     }
 
     /**
-     * Сравнение имен классов
+     * Сравнение имен классов (поддерживает дженерики)
      */
     private fun classNameEquals(type1: ClassName, type2: ClassName): Boolean {
         return when {
             type1 is ClassName.Simple && type2 is ClassName.Simple -> type1.name == type2.name
+            type1 is ClassName.Generic && type2 is ClassName.Generic -> {
+                type1.name == type2.name && 
+                type1.typeArgs.size == type2.typeArgs.size &&
+                type1.typeArgs.zip(type2.typeArgs).all { (t1, t2) -> classNameEquals(t1, t2) }
+            }
             else -> false
         }
     }
@@ -733,19 +789,25 @@ class SemanticAnalyzer(private var program: Program) {
     /**
      * Разрешение вызова метода (Method Resolution)
      * Выбирает правильный метод из перегруженных на основе типов аргументов
+     * @param classSymbol класс-владелец метода
+     * @param methodName имя метода
+     * @param argTypes типы аргументов
+     * @param context контекст для сообщений об ошибках
+     * @param callerClass класс, из которого вызывается метод (для проверки доступа)
      */
     private fun resolveMethodCall(
         classSymbol: ClassSymbol,
         methodName: String,
         argTypes: List<ClassName>,
-        context: String
+        context: String,
+        callerClass: ClassSymbol? = null
     ): MethodSymbol {
         // Получаем все методы с данным именем
         val candidates = classSymbol.findMethods(methodName)
 
         if (candidates.isEmpty()) {
             throw exceptions.SematicException(
-                "Method '${methodName}' not found in class '${context}'"
+                "No suitable method '${methodName}' found in class '${context}'"
             )
         }
 
@@ -799,6 +861,7 @@ class SemanticAnalyzer(private var program: Program) {
             )
         }
 
+        // Методы всегда доступны (модификаторы доступа для методов не поддерживаются)
         return compatibleMethods.first()
     }
 
@@ -808,6 +871,79 @@ class SemanticAnalyzer(private var program: Program) {
     private fun classNameToString(className: ClassName): String {
         return when (className) {
             is ClassName.Simple -> className.name
+            is ClassName.Generic -> {
+                val typeArgsStr = className.typeArgs.joinToString(", ") { classNameToString(it) }
+                "${className.name}[$typeArgsStr]"
+            }
+        }
+    }
+
+    /**
+     * Определить тип возврата для встроенных методов с учетом перегрузок
+     */
+    private fun getBuiltinMethodReturnType(
+        receiverType: ClassName,
+        receiverTypeName: String,
+        methodName: String,
+        argType: ClassName?
+    ): ClassName {
+        return when (receiverTypeName) {
+            "Integer" -> {
+                when (methodName) {
+                    "toReal" -> ClassName.Simple("Real")
+                    "toBoolean" -> ClassName.Simple("Bool")
+                    "UnaryMinus" -> ClassName.Simple("Integer")
+                    "Plus", "Mult", "Minus", "Div", "Rem" -> {
+                        if (argType is ClassName.Simple && argType.name == "Real") {
+                            ClassName.Simple("Real")
+                        } else {
+                            ClassName.Simple("Integer")
+                        }
+                    }
+                    "Equal", "NotEqual", "Less", "Greater", "LessEqual", "GreaterEqual" -> {
+                        ClassName.Simple("Bool")
+                    }
+                    else -> ClassName.Simple("Unknown")
+                }
+            }
+            "Real" -> {
+                when (methodName) {
+                    "toInteger" -> ClassName.Simple("Integer")
+                    "UnaryMinus" -> ClassName.Simple("Real")
+                    "Plus", "Mult", "Minus", "Div", "Rem" -> {
+                        ClassName.Simple("Real")
+                    }
+                    "Equal", "NotEqual", "Less", "Greater", "LessEqual", "GreaterEqual" -> {
+                        ClassName.Simple("Bool")
+                    }
+                    else -> ClassName.Simple("Unknown")
+                }
+            }
+            "Bool", "Boolean" -> {
+                when (methodName) {
+                    "toInteger" -> ClassName.Simple("Integer")
+                    "Equal", "NotEqual", "And", "Or", "Xor", "Not" -> {
+                        ClassName.Simple("Bool")
+                    }
+                    else -> ClassName.Simple("Unknown")
+                }
+            }
+            "Array" -> {
+                when (methodName) {
+                    "Length" -> ClassName.Simple("Integer")
+                    "get" -> {
+                        // get возвращает тип элемента массива
+                        if (receiverType is ClassName.Generic && receiverType.typeArgs.isNotEmpty()) {
+                            receiverType.typeArgs[0]  // Array[T].get() -> T
+                        } else {
+                            ClassName.Simple("Unknown")
+                        }
+                    }
+                    "set" -> ClassName.Simple("void")
+                    else -> ClassName.Simple("Unknown")
+                }
+            }
+            else -> ClassName.Simple("Unknown")
         }
     }
 
@@ -998,6 +1134,7 @@ class SemanticAnalyzer(private var program: Program) {
                     "Minus" -> Expr.IntLit(left - right)
                     "Mult" -> Expr.IntLit(left * right)
                     "Div" -> if (right != 0L) Expr.IntLit(left / right) else null
+                    "Rem" -> if (right != 0L) Expr.IntLit(left % right) else null
                     // Сравнения
                     "Less" -> Expr.BoolLit(left < right)
                     "LessEqual" -> Expr.BoolLit(left <= right)
@@ -1019,6 +1156,7 @@ class SemanticAnalyzer(private var program: Program) {
                     "Minus" -> Expr.RealLit(left - right)
                     "Mult" -> Expr.RealLit(left * right)
                     "Div" -> if (right != 0.0) Expr.RealLit(left / right) else null
+                    "Rem" -> if (right != 0.0) Expr.RealLit(left % right) else null
                     // Сравнения
                     "Less" -> Expr.BoolLit(left < right)
                     "LessEqual" -> Expr.BoolLit(left <= right)

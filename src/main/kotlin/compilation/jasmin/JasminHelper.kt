@@ -11,6 +11,27 @@ fun toJasminType(type: ClassName): String {
             "void", "Void" -> "V"        // void (для returnType, не для полей)
             else -> "L${type.name};"     // объектный тип: LProgram; LArray;
         }
+        is ClassName.Generic -> {
+            when (type.name) {
+                "Array" -> {
+                    // Array[T] -> массив в JVM
+                    val elementType = type.typeArgs.firstOrNull()
+                    when (elementType) {
+                        is ClassName.Simple -> when (elementType.name) {
+                            "Integer", "Int" -> "[I"      // int[]
+                            "Real", "Double" -> "[D"      // double[]
+                            "Bool", "Boolean" -> "[Z"     // boolean[]
+                            else -> "[Ljava/lang/Object;" // Object[]
+                        }
+                        else -> "[Ljava/lang/Object;" // для дженериков используем Object[]
+                    }
+                }
+                else -> {
+                    // Другие дженерики - используем базовое имя
+                    "L${type.name};"
+                }
+            }
+        }
     }
 }
 
@@ -29,8 +50,12 @@ fun numberToJasmin(value: Long): String {
     }
 }
 
-fun isBuiltin(type: ClassName): Boolean =
-    type is ClassName.Simple && type.name in listOf("Integer", "Real", "Bool")
+fun isBuiltin(type: ClassName): Boolean {
+    return when (type) {
+        is ClassName.Simple -> type.name in listOf("Integer", "Real", "Bool", "Boolean")
+        is ClassName.Generic -> type.name == "Array"
+    }
+}
 
 /**
  * Получить размер типа в слотах JVM
@@ -41,6 +66,10 @@ fun getJvmSlotSize(type: ClassName): Int {
             "Real", "Double" -> 2  // double занимает 2 слота
             "Integer", "Int", "Bool", "Boolean" -> 1  // int, boolean - 1 слот
             else -> 1  // Object types - 1 слот (reference)
+        }
+        is ClassName.Generic -> {
+            // Array - объект, занимает 1 слот
+            1
         }
     }
 }

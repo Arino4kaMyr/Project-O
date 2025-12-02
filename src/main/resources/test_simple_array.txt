@@ -1,0 +1,11 @@
+# Простой тест для проверки Array
+class Program is
+  method main() is
+    var arr : Array[Integer](3)
+    arr.set(0, 10)
+    var x : Integer(0)
+    x := arr.get(0)
+    print(x)
+  end
+end
+

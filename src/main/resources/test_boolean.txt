@@ -1,0 +1,56 @@
+# Тест Boolean - логические операции, сравнения, конвертации
+class Program is
+  method main() is
+    print(4000)
+    var t : Bool(true)
+    var f : Bool(false)
+    
+    # Логические операции
+    var and_res : Bool()
+    and_res := t.And(f)  # false
+    print(and_res)
+    var and_res2 : Bool()
+    and_res2 := t.And(t)  # true
+    print(and_res2)
+    
+    var or_res : Bool()
+    or_res := t.Or(f)  # true
+    print(or_res)
+    var or_res2 : Bool()
+    or_res2 := f.Or(f)  # false
+    print(or_res2)
+    
+    var xor_res : Bool()
+    xor_res := t.Xor(f)  # true
+    print(xor_res)
+    var xor_res2 : Bool()
+    xor_res2 := t.Xor(t)  # false
+    print(xor_res2)
+    
+    var not_t : Bool()
+    not_t := t.Not()  # false
+    print(not_t)
+    var not_f : Bool()
+    not_f := f.Not()  # true
+    print(not_f)
+    
+    # Сравнения Boolean
+    var eq_b : Bool()
+    eq_b := t.Equal(f)  # false
+    print(eq_b)
+    var eq_b2 : Bool()
+    eq_b2 := t.Equal(t)  # true
+    print(eq_b2)
+    
+    # Конвертация Boolean
+    var int_from_true : Integer()
+    int_from_true := t.toInteger()  # 1
+    print(int_from_true)
+    var int_from_false : Integer()
+    int_from_false := f.toInteger()  # 0
+    print(int_from_false)
+    
+    print(9999)
+  end
+end
+

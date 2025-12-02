@@ -1,0 +1,40 @@
+# Тест модификаторов доступа - private и public поля и методы
+class Calculator is
+  private var value : Integer(0)
+  
+  method setValue(x : Integer) is
+    value := x
+  end
+  
+  method add(x : Integer) is
+    value := value.Plus(x)
+  end
+  
+  method increment() is
+    this.add(1)
+  end
+  
+  method getValue() : Integer is
+    return value
+  end
+end
+
+class Program is
+  method main() is
+    print(9000)
+    
+    var calc : Calculator()
+    calc.setValue(10)
+    
+    var result : Integer()
+    result := calc.getValue()  # 10
+    print(result)
+    
+    calc.increment()
+    result := calc.getValue()  # 11
+    print(result)
+    
+    print(9999)
+  end
+end
+

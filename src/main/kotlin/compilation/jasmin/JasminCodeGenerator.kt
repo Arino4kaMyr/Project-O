@@ -31,6 +31,7 @@ class JasminCodeGenerator(
         val superName = when (val p = classDecl.parent) {
             null -> "java/lang/Object"
             is ClassName.Simple -> p.name.replace('.', '/')
+            is ClassName.Generic -> p.name.replace('.', '/')  // Дженерики в родителях пока не поддерживаются
         }
         sb.append(".super $superName\n")
 
@@ -47,13 +48,15 @@ class JasminCodeGenerator(
         classDecl: ClassDecl,
         classSymbol: ClassSymbol,
     ) {
-
-        // Идём по полям класса из семантики
-        // Используем protected вместо private, чтобы дочерние классы могли обращаться к полям родителя
-        classSymbol.fields.values.forEach { fieldSymbol ->
-            val fieldName = fieldSymbol.name
-            val jasminType = toJasminType(fieldSymbol.type)
-            sb.append(".field protected $fieldName $jasminType\n")
+        // Идём по полям класса из AST, чтобы получить модификатор доступа
+        classDecl.members.filterIsInstance<MemberDecl.VarDecl>().forEach { varDecl ->
+            val fieldName = varDecl.name
+            val jasminType = toJasminType(varDecl.type)
+            val accessModifier = when (varDecl.visibility) {
+                syntaxer.AccessModifier.PRIVATE -> "private"
+                syntaxer.AccessModifier.PUBLIC -> "public"
+            }
+            sb.append(".field $accessModifier $fieldName $jasminType\n")
         }
 
         if (classSymbol.fields.isNotEmpty()) {
@@ -133,7 +136,62 @@ class JasminCodeGenerator(
 
             when (val init = vDecl.init) {
                 is Expr.Call -> {
-                    val typeName = (fieldType as ClassName.Simple).name
+                    // Обработка дженериков Array и List
+                    if (fieldType is ClassName.Generic) {
+                        when (fieldType.name) {
+                            "Array" -> {
+                                // Array[T](length) -> создание массива
+                                sb.append("    aload_0\n")
+                                if (init.args.size != 1) {
+                                    error("Array constructor requires exactly 1 argument (length)")
+                                }
+                                // Генерируем длину массива
+                                generateExpr(
+                                    sb,
+                                    init.args[0],
+                                    classSymbol,
+                                    MethodSymbol("<initField>", emptyList(), null, null)
+                                )
+                                // Длина уже на стеке (int)
+                                val elementType = if (fieldType.typeArgs.isNotEmpty()) {
+                                    fieldType.typeArgs[0]
+                                } else {
+                                    ClassName.Simple("Unknown")
+                                }
+                                // Создаем массив нужного типа
+                                val arrayType = toJasminType(fieldType)
+                                when (elementType) {
+                                    is ClassName.Simple -> when (elementType.name) {
+                                        "Integer", "Int" -> {
+                                            sb.append("    newarray int\n")
+                                        }
+                                        "Real", "Double" -> {
+                                            sb.append("    newarray double\n")
+                                        }
+                                        "Bool", "Boolean" -> {
+                                            sb.append("    newarray boolean\n")
+                                        }
+                                        else -> {
+                                            sb.append("    anewarray ${elementType.name}\n")
+                                        }
+                                    }
+                                    else -> {
+                                        sb.append("    anewarray java/lang/Object\n")
+                                    }
+                                }
+                                sb.append("    putfield ${classSymbol.name}/${vDecl.name} $arrayType\n")
+                            }
+                            else -> {
+                                error("Unknown generic type: ${fieldType.name}")
+                            }
+                        }
+                        return
+                    }
+                    
+                    val typeName = when (fieldType) {
+                        is ClassName.Simple -> fieldType.name
+                        else -> error("Expected simple type for field initialization")
+                    }
 
                     if (typeName == "Integer") {
                         sb.append("    aload_0\n")
@@ -240,11 +298,10 @@ class JasminCodeGenerator(
             // return type, if nothing -> it's void
             val returnDesc = methodSymbol.returnType?.let { toJasminType(it) } ?: "V"
 
-            // пока делаем все методы public
             sb.append(".method public ${methodSymbol.name}($paramDesc)$returnDesc\n")
 
             sb.append("    .limit stack 32\n")
-            sb.append("    .limit locals 16\n")
+            sb.append("    .limit locals 32\n")
 
             // 2. Тело метода, если оно есть
             methodDecl.body?.let { body ->
@@ -298,9 +355,152 @@ class JasminCodeGenerator(
     ) {
         when (body) {
             is MethodBody.BlockBody -> {
-                // Генерируем байткод для каждого стейтмента
+                // Объединяем переменные и statements в один список, сохраняя порядок
+                // Переменные с простыми инициализаторами идут сразу, остальные - по порядку
+                val allItems = mutableListOf<Pair<Boolean, Any>>() // (isVar, item)
+                
+                body.vars.forEach { varDecl ->
+                    allItems.add(true to varDecl)
+                }
                 body.stmts.forEach { stmt ->
-                    generateStmt(sb, stmt, classSymbol, methodSymbol)
+                    allItems.add(false to stmt)
+                }
+                
+                // Обрабатываем элементы по порядку
+                allItems.forEach { (isVar, item) ->
+                    if (isVar) {
+                        initializeLocalVariable(sb, item as MemberDecl.VarDecl, classSymbol, methodSymbol)
+                    } else {
+                        generateStmt(sb, item as Stmt, classSymbol, methodSymbol)
+                    }
+                }
+            }
+        }
+    }
+    
+    /**
+     * Инициализация локальной переменной в методе
+     */
+    private fun initializeLocalVariable(
+        sb: StringBuilder,
+        varDecl: MemberDecl.VarDecl,
+        classSymbol: ClassSymbol,
+        methodSymbol: MethodSymbol
+    ) {
+        val varType = varDecl.type
+        val varName = varDecl.name
+        val init = varDecl.init
+        
+        // Получаем индекс локальной переменной
+        val localIndex = methodSymbol.symbolTable.getIndex(varName)
+        val realIndex = getRealJvmIndex(varName, methodSymbol)
+        
+        when (varType) {
+            is ClassName.Generic -> when (varType.name) {
+                "Array" -> {
+                    // Array[T](length) -> создание массива
+                    if (init is Expr.Call && init.args.size == 1) {
+                        // Генерируем длину массива
+                        generateExpr(sb, init.args[0], classSymbol, methodSymbol)
+                        // Длина уже на стеке (int)
+                        val elementType = if (varType.typeArgs.isNotEmpty()) {
+                            varType.typeArgs[0]
+                        } else {
+                            ClassName.Simple("Unknown")
+                        }
+                        // Создаем массив нужного типа
+                        when (elementType) {
+                            is ClassName.Simple -> when (elementType.name) {
+                                "Integer", "Int" -> {
+                                    sb.append("    newarray int\n")
+                                }
+                                "Real", "Double" -> {
+                                    sb.append("    newarray double\n")
+                                }
+                                "Bool", "Boolean" -> {
+                                    sb.append("    newarray boolean\n")
+                                }
+                                else -> {
+                                    sb.append("    anewarray ${elementType.name}\n")
+                                }
+                            }
+                            else -> {
+                                sb.append("    anewarray java/lang/Object\n")
+                            }
+                        }
+                        // Сохраняем массив в локальную переменную
+                        sb.append("    astore $realIndex\n")
+                    } else {
+                        error("Array initialization requires exactly 1 argument (length)")
+                    }
+                }
+                else -> {
+                    error("Unknown generic type: ${varType.name}")
+                }
+            }
+            is ClassName.Simple -> {
+                // Обработка простых типов (Integer, Real, Bool)
+                when (varType.name) {
+                    "Integer", "Int" -> {
+                        if (init is Expr.Call && init.args.isNotEmpty()) {
+                            generateExpr(sb, init.args[0], classSymbol, methodSymbol)
+                            sb.append("    istore $realIndex\n")
+                        } else if (init is Expr.IntLit) {
+                            generateExpr(sb, init, classSymbol, methodSymbol)
+                            sb.append("    istore $realIndex\n")
+                        } else {
+                            // Integer() -> 0
+                            sb.append("    iconst_0\n")
+                            sb.append("    istore $realIndex\n")
+                        }
+                    }
+                    "Real", "Double" -> {
+                        if (init is Expr.Call && init.args.isNotEmpty()) {
+                            generateExpr(sb, init.args[0], classSymbol, methodSymbol)
+                            sb.append("    dstore $realIndex\n")
+                        } else if (init is Expr.RealLit) {
+                            generateExpr(sb, init, classSymbol, methodSymbol)
+                            sb.append("    dstore $realIndex\n")
+                        } else {
+                            // Real() -> 0.0
+                            sb.append("    ldc2_w 0.0\n")
+                            sb.append("    dstore $realIndex\n")
+                        }
+                    }
+                    "Bool", "Boolean" -> {
+                        if (init is Expr.Call && init.args.isNotEmpty()) {
+                            generateExpr(sb, init.args[0], classSymbol, methodSymbol)
+                            sb.append("    istore $realIndex\n")
+                        } else if (init is Expr.BoolLit) {
+                            generateExpr(sb, init, classSymbol, methodSymbol)
+                            sb.append("    istore $realIndex\n")
+                        } else {
+                            // Bool() -> false
+                            sb.append("    iconst_0\n")
+                            sb.append("    istore $realIndex\n")
+                        }
+                    }
+                    else -> {
+                        // Пользовательские типы - создаем объект
+                        if (init is Expr.Call) {
+                            sb.append("    new ${varType.name}\n")
+                            sb.append("    dup\n")
+                            init.args.forEach { arg ->
+                                generateExpr(sb, arg, classSymbol, methodSymbol)
+                            }
+                            val argsDesc = init.args.joinToString("") { "I" } // упрощенно
+                            sb.append("    invokespecial ${varType.name}/<init>($argsDesc)V\n")
+                            sb.append("    astore $realIndex\n")
+                        } else if (init is Expr.ClassNameExpr) {
+                            // Без аргументов - просто создаем объект
+                            sb.append("    new ${varType.name}\n")
+                            sb.append("    dup\n")
+                            sb.append("    invokespecial ${varType.name}/<init>()V\n")
+                            sb.append("    astore $realIndex\n")
+                        } else {
+                            error("Unknown initialization for type ${varType.name}")
+                        }
+                    }
                 }
             }
         }
@@ -340,7 +540,7 @@ class JasminCodeGenerator(
                 // Проверяем, возвращает ли выражение значение (не void)
                 val returnsValue = when (exprType) {
                     is ClassName.Simple -> exprType.name != "void" && exprType.name != "Void"
-                    else -> true
+                    is ClassName.Generic -> true  // Дженерики всегда возвращают значение
                 }
                 if (returnsValue) {
                     sb.append("    pop\n")
@@ -593,35 +793,699 @@ class JasminCodeGenerator(
         } else {
             // Вызов метода на объекте: receiver.method(args)
             if (isBuiltin(receiverType)) {
-                // Обработка встроенных методов для примитивных типов
+                // Обработка встроенных методов для примитивных типов и дженериков
                 when (receiverType) {
+                    is ClassName.Generic -> when (receiverType.name) {
+                        "Array" -> {
+                            when (call.method) {
+                                "Length" -> {
+                                    // Array.length -> arraylength
+                                    sb.append("    arraylength\n")
+                                    // arraylength возвращает int, но нам нужен Integer
+                                    // На стеке уже int, ничего дополнительного не делаем
+                                }
+                                "get" -> {
+                                    // Array.get(i) -> array[index]
+                                    if (call.args.size != 1) {
+                                        error("Array.get() requires exactly 1 argument")
+                                    }
+                                    // Индекс уже на стеке (вызван generateExpr для аргумента)
+                                    // Массив уже на стеке (receiver)
+                                    // Нужен порядок: [array, index]
+                                    // Но сейчас порядок: [receiver, index], что правильно
+                                    val elementType = if (receiverType.typeArgs.isNotEmpty()) {
+                                        receiverType.typeArgs[0]
+                                    } else {
+                                        ClassName.Simple("Unknown")
+                                    }
+                                    // Генерируем код для загрузки элемента
+                                    when (elementType) {
+                                        is ClassName.Simple -> when (elementType.name) {
+                                            "Integer", "Int" -> {
+                                                sb.append("    iaload\n")
+                                            }
+                                            "Real", "Double" -> {
+                                                sb.append("    daload\n")
+                                            }
+                                            "Bool", "Boolean" -> {
+                                                sb.append("    baload\n")
+                                            }
+                                            else -> {
+                                                sb.append("    aaload\n")  // Object[]
+                                            }
+                                        }
+                                        else -> {
+                                            sb.append("    aaload\n")  // Generic type
+                                        }
+                                    }
+                                }
+                                "set" -> {
+                                    // Array.set(i, v) -> array[index] = value
+                                    if (call.args.size != 2) {
+                                        error("Array.set() requires exactly 2 arguments")
+                                    }
+                                    // Стек: [array, index, value]
+                                    // Нужно: array[index] = value
+                                    val elementType = if (receiverType.typeArgs.isNotEmpty()) {
+                                        receiverType.typeArgs[0]
+                                    } else {
+                                        ClassName.Simple("Unknown")
+                                    }
+                                    // Генерируем код для сохранения элемента
+                                    when (elementType) {
+                                        is ClassName.Simple -> when (elementType.name) {
+                                            "Integer", "Int" -> {
+                                                sb.append("    iastore\n")
+                                            }
+                                            "Real", "Double" -> {
+                                                sb.append("    dastore\n")
+                                            }
+                                            "Bool", "Boolean" -> {
+                                                sb.append("    bastore\n")
+                                            }
+                                            else -> {
+                                                sb.append("    aastore\n")  // Object[]
+                                            }
+                                        }
+                                        else -> {
+                                            sb.append("    aastore\n")  // Generic type
+                                        }
+                                    }
+                                }
+                                else -> error("Unknown Array method '${call.method}'")
+                            }
+                        }
+                        else -> error("Unknown generic type '${receiverType.name}'")
+                    }
                     is ClassName.Simple -> when (receiverType.name) {
                         "Integer" -> {
+                            // Определяем тип первого аргумента для перегрузки
+                            val argType = if (call.args.isNotEmpty()) {
+                                inferExprType(call.args[0], classSymbol, methodSymbol)
+                            } else {
+                                null
+                            }
+                            
                             when (call.method) {
                                 "Plus" -> {
-                                    // стек: [x, y] уже положили перед вызовом (receiver + args)
-                                    sb.append("    iadd\n")
+                                    if (argType is ClassName.Simple && argType.name == "Real") {
+                                        // Integer + Real → Real
+                                        // Стек: [Integer, Real] -> нужно [Real, Real]
+                                        // Используем dup2_x1 для перестановки: [Real, Integer, Real]
+                                        // Затем swap (нужно конвертировать Integer, который под Real)
+                                        // Проще: сохранить Real, конвертировать Integer, загрузить Real, сложить
+                                        val tempSlot = methodSymbol.symbolTable.getAllSymbols().size + 1
+                                        sb.append("    dstore $tempSlot\n")  // сохраняем Real
+                                        sb.append("    i2d\n")  // конвертируем Integer в Real
+                                        sb.append("    dload $tempSlot\n")  // загружаем Real обратно
+                                        sb.append("    dadd\n")  // складываем
+                                    } else {
+                                        // Integer + Integer → Integer
+                                        sb.append("    iadd\n")
+                                    }
                                 }
                                 "Mult" -> {
-                                    sb.append("    imul\n")
+                                    if (argType is ClassName.Simple && argType.name == "Real") {
+                                        val tempSlot = methodSymbol.symbolTable.getAllSymbols().size + 1
+                                        sb.append("    dstore $tempSlot\n")
+                                        sb.append("    i2d\n")
+                                        sb.append("    dload $tempSlot\n")
+                                        sb.append("    dmul\n")
+                                    } else {
+                                        sb.append("    imul\n")
+                                    }
+                                }
+                                "Minus" -> {
+                                    if (argType is ClassName.Simple && argType.name == "Real") {
+                                        // Integer - Real → Real
+                                        val tempSlot = methodSymbol.symbolTable.getAllSymbols().size + 1
+                                        sb.append("    dstore $tempSlot\n")  // сохраняем Real
+                                        sb.append("    i2d\n")  // конвертируем Integer в Real
+                                        sb.append("    dload $tempSlot\n")  // загружаем Real
+                                        sb.append("    dsub\n")  // Integer - Real
+                                    } else {
+                                        // Integer - Integer → Integer
+                                        sb.append("    isub\n")
+                                    }
+                                }
+                                "Div" -> {
+                                    if (argType is ClassName.Simple && argType.name == "Real") {
+                                        val tempSlot = methodSymbol.symbolTable.getAllSymbols().size + 1
+                                        sb.append("    dstore $tempSlot\n")
+                                        sb.append("    i2d\n")
+                                        sb.append("    dload $tempSlot\n")
+                                        sb.append("    ddiv\n")
+                                    } else {
+                                        sb.append("    idiv\n")
+                                    }
+                                }
+                                "Rem" -> {
+                                    if (argType is ClassName.Simple && argType.name == "Real") {
+                                        val tempSlot = methodSymbol.symbolTable.getAllSymbols().size + 1
+                                        sb.append("    dstore $tempSlot\n")
+                                        sb.append("    i2d\n")
+                                        sb.append("    dload $tempSlot\n")
+                                        sb.append("    drem\n")
+                                    } else {
+                                        sb.append("    irem\n")
+                                    }
+                                }
+                                "UnaryMinus" -> {
+                                    // Унарный минус: -x
+                                    sb.append("    ineg\n")
+                                }
+                                "GreaterEqual" -> {
+                                    if (argType is ClassName.Simple && argType.name == "Real") {
+                                        // Integer >= Real → Boolean
+                                        // Стек: [Integer, Real] -> нужен [Real, Real] для dcmpg
+                                        val tempSlot = methodSymbol.symbolTable.getAllSymbols().size + 1
+                                        sb.append("    dstore $tempSlot\n")  // сохраняем Real
+                                        sb.append("    i2d\n")  // конвертируем Integer в Real
+                                        sb.append("    dload $tempSlot\n")  // загружаем Real
+                                        val trueLabel = newLabel("Lge_true_")
+                                        val endLabel = newLabel("Lge_end_")
+                                        sb.append("    dcmpg\n")  // сравниваем два double (результат: 1, 0, -1)
+                                        sb.append("    ifge $trueLabel\n")  // если результат >= 0
+                                        sb.append("    iconst_0\n")
+                                        sb.append("    goto $endLabel\n")
+                                        sb.append("$trueLabel:\n")
+                                        sb.append("    iconst_1\n")
+                                        sb.append("$endLabel:\n")
+                                    } else {
+                                        // Integer >= Integer → Boolean
+                                        val trueLabel = newLabel("Lge_true_")
+                                        val endLabel = newLabel("Lge_end_")
+                                        sb.append("    if_icmpge $trueLabel\n")
+                                        sb.append("    iconst_0\n")
+                                        sb.append("    goto $endLabel\n")
+                                        sb.append("$trueLabel:\n")
+                                        sb.append("    iconst_1\n")
+                                        sb.append("$endLabel:\n")
+                                    }
+                                }
+                                "Less" -> {
+                                    if (argType is ClassName.Simple && argType.name == "Real") {
+                                        val tempSlot = methodSymbol.symbolTable.getAllSymbols().size + 1
+                                        sb.append("    dstore $tempSlot\n")
+                                        sb.append("    i2d\n")
+                                        sb.append("    dload $tempSlot\n")
+                                        val trueLabel = newLabel("Llt_true_")
+                                        val endLabel = newLabel("Llt_end_")
+                                        sb.append("    dcmpg\n")
+                                        sb.append("    iflt $trueLabel\n")
+                                        sb.append("    iconst_0\n")
+                                        sb.append("    goto $endLabel\n")
+                                        sb.append("$trueLabel:\n")
+                                        sb.append("    iconst_1\n")
+                                        sb.append("$endLabel:\n")
+                                    } else {
+                                        val trueLabel = newLabel("Llt_true_")
+                                        val endLabel = newLabel("Llt_end_")
+                                        sb.append("    if_icmplt $trueLabel\n")
+                                        sb.append("    iconst_0\n")
+                                        sb.append("    goto $endLabel\n")
+                                        sb.append("$trueLabel:\n")
+                                        sb.append("    iconst_1\n")
+                                        sb.append("$endLabel:\n")
+                                    }
+                                }
+                                "LessEqual" -> {
+                                    if (argType is ClassName.Simple && argType.name == "Real") {
+                                        val tempSlot = methodSymbol.symbolTable.getAllSymbols().size + 1
+                                        sb.append("    dstore $tempSlot\n")
+                                        sb.append("    i2d\n")
+                                        sb.append("    dload $tempSlot\n")
+                                        val trueLabel = newLabel("Lle_true_")
+                                        val endLabel = newLabel("Lle_end_")
+                                        sb.append("    dcmpg\n")
+                                        sb.append("    ifle $trueLabel\n")
+                                        sb.append("    iconst_0\n")
+                                        sb.append("    goto $endLabel\n")
+                                        sb.append("$trueLabel:\n")
+                                        sb.append("    iconst_1\n")
+                                        sb.append("$endLabel:\n")
+                                    } else {
+                                        val trueLabel = newLabel("Lle_true_")
+                                        val endLabel = newLabel("Lle_end_")
+                                        sb.append("    if_icmple $trueLabel\n")
+                                        sb.append("    iconst_0\n")
+                                        sb.append("    goto $endLabel\n")
+                                        sb.append("$trueLabel:\n")
+                                        sb.append("    iconst_1\n")
+                                        sb.append("$endLabel:\n")
+                                    }
+                                }
+                                "Greater" -> {
+                                    if (argType is ClassName.Simple && argType.name == "Real") {
+                                        val tempSlot = methodSymbol.symbolTable.getAllSymbols().size + 1
+                                        sb.append("    dstore $tempSlot\n")
+                                        sb.append("    i2d\n")
+                                        sb.append("    dload $tempSlot\n")
+                                        val trueLabel = newLabel("Lgt_true_")
+                                        val endLabel = newLabel("Lgt_end_")
+                                        sb.append("    dcmpg\n")
+                                        sb.append("    ifgt $trueLabel\n")
+                                        sb.append("    iconst_0\n")
+                                        sb.append("    goto $endLabel\n")
+                                        sb.append("$trueLabel:\n")
+                                        sb.append("    iconst_1\n")
+                                        sb.append("$endLabel:\n")
+                                    } else {
+                                        val trueLabel = newLabel("Lgt_true_")
+                                        val endLabel = newLabel("Lgt_end_")
+                                        sb.append("    if_icmpgt $trueLabel\n")
+                                        sb.append("    iconst_0\n")
+                                        sb.append("    goto $endLabel\n")
+                                        sb.append("$trueLabel:\n")
+                                        sb.append("    iconst_1\n")
+                                        sb.append("$endLabel:\n")
+                                    }
+                                }
+                                "Equal" -> {
+                                    if (argType is ClassName.Simple && argType.name == "Real") {
+                                        val tempSlot = methodSymbol.symbolTable.getAllSymbols().size + 1
+                                        sb.append("    dstore $tempSlot\n")
+                                        sb.append("    i2d\n")
+                                        sb.append("    dload $tempSlot\n")
+                                        val trueLabel = newLabel("Leq_true_")
+                                        val endLabel = newLabel("Leq_end_")
+                                        sb.append("    dcmpg\n")
+                                        sb.append("    ifeq $trueLabel\n")
+                                        sb.append("    iconst_0\n")
+                                        sb.append("    goto $endLabel\n")
+                                        sb.append("$trueLabel:\n")
+                                        sb.append("    iconst_1\n")
+                                        sb.append("$endLabel:\n")
+                                    } else {
+                                        val trueLabel = newLabel("Leq_true_")
+                                        val endLabel = newLabel("Leq_end_")
+                                        sb.append("    if_icmpeq $trueLabel\n")
+                                        sb.append("    iconst_0\n")
+                                        sb.append("    goto $endLabel\n")
+                                        sb.append("$trueLabel:\n")
+                                        sb.append("    iconst_1\n")
+                                        sb.append("$endLabel:\n")
+                                    }
+                                }
+                                "NotEqual" -> {
+                                    if (argType is ClassName.Simple && argType.name == "Real") {
+                                        val tempSlot = methodSymbol.symbolTable.getAllSymbols().size + 1
+                                        sb.append("    dstore $tempSlot\n")
+                                        sb.append("    i2d\n")
+                                        sb.append("    dload $tempSlot\n")
+                                        val trueLabel = newLabel("Lne_true_")
+                                        val endLabel = newLabel("Lne_end_")
+                                        sb.append("    dcmpg\n")
+                                        sb.append("    ifne $trueLabel\n")
+                                        sb.append("    iconst_0\n")
+                                        sb.append("    goto $endLabel\n")
+                                        sb.append("$trueLabel:\n")
+                                        sb.append("    iconst_1\n")
+                                        sb.append("$endLabel:\n")
+                                    } else {
+                                        val trueLabel = newLabel("Lne_true_")
+                                        val endLabel = newLabel("Lne_end_")
+                                        sb.append("    if_icmpne $trueLabel\n")
+                                        sb.append("    iconst_0\n")
+                                        sb.append("    goto $endLabel\n")
+                                        sb.append("$trueLabel:\n")
+                                        sb.append("    iconst_1\n")
+                                        sb.append("$endLabel:\n")
+                                    }
+                                }
+                                "toReal" -> {
+                                    // Integer → Real
+                                    sb.append("    i2d\n")
+                                }
+                                "toBoolean" -> {
+                                    // Integer → Boolean (0 = false, иначе true)
+                                    val falseLabel = newLabel("LtoBool_false_")
+                                    val endLabel = newLabel("LtoBool_end_")
+                                    sb.append("    ifeq $falseLabel\n")
+                                    sb.append("    iconst_1\n")  // true
+                                    sb.append("    goto $endLabel\n")
+                                    sb.append("$falseLabel:\n")
+                                    sb.append("    iconst_0\n")  // false
+                                    sb.append("$endLabel:\n")
                                 }
                                 else -> error("Unknown Integer method '${call.method}'")
                             }
                         }
                         "Real" -> {
+                            // Определяем тип первого аргумента для перегрузки
+                            val argType = if (call.args.isNotEmpty()) {
+                                inferExprType(call.args[0], classSymbol, methodSymbol)
+                            } else {
+                                null
+                            }
+                            
                             when (call.method) {
                                 "Plus" -> {
-                                    // стек: [x, y] уже положили перед вызовом (receiver + args)
-                                    sb.append("    dadd\n")
+                                    if (argType is ClassName.Simple && argType.name == "Integer") {
+                                        // Real + Integer → Real
+                                        // Стек: [Real(high), Real(low), Integer]
+                                        val intSlot = methodSymbol.symbolTable.getAllSymbols().size + 1
+                                        val realSlot = intSlot + 1
+                                        sb.append("    istore $intSlot\n")  // сохраняем Integer (1 слот)
+                                        sb.append("    dstore $realSlot\n")  // сохраняем Real (2 слота)
+                                        sb.append("    iload $intSlot\n")  // загружаем Integer
+                                        sb.append("    i2d\n")  // конвертируем в Real
+                                        sb.append("    dload $realSlot\n")  // загружаем Real
+                                        sb.append("    dadd\n")  // Real + Real
+                                    } else {
+                                        // Real + Real → Real
+                                        sb.append("    dadd\n")
+                                    }
                                 }
                                 "Mult" -> {
-                                    sb.append("    dmul\n")
+                                    if (argType is ClassName.Simple && argType.name == "Integer") {
+                                        val intSlot = methodSymbol.symbolTable.getAllSymbols().size + 1
+                                        val realSlot = intSlot + 1
+                                        sb.append("    istore $intSlot\n")
+                                        sb.append("    dstore $realSlot\n")
+                                        sb.append("    iload $intSlot\n")
+                                        sb.append("    i2d\n")
+                                        sb.append("    dload $realSlot\n")
+                                        sb.append("    dmul\n")
+                                    } else {
+                                        sb.append("    dmul\n")
+                                    }
+                                }
+                                "Minus" -> {
+                                    if (argType is ClassName.Simple && argType.name == "Integer") {
+                                        // Real - Integer → Real
+                                        val intSlot = methodSymbol.symbolTable.getAllSymbols().size + 1
+                                        val realSlot = intSlot + 1
+                                        sb.append("    istore $intSlot\n")  // сохраняем Integer
+                                        sb.append("    dstore $realSlot\n")  // сохраняем Real
+                                        sb.append("    iload $intSlot\n")  // загружаем Integer
+                                        sb.append("    i2d\n")  // конвертируем в Real
+                                        sb.append("    dload $realSlot\n")  // загружаем Real
+                                        sb.append("    dsub\n")  // Real - Integer(Real)
+                                    } else {
+                                        // Real - Real → Real
+                                        sb.append("    dsub\n")
+                                    }
+                                }
+                                "Div" -> {
+                                    if (argType is ClassName.Simple && argType.name == "Integer") {
+                                        val intSlot = methodSymbol.symbolTable.getAllSymbols().size + 1
+                                        val realSlot = intSlot + 1
+                                        sb.append("    istore $intSlot\n")
+                                        sb.append("    dstore $realSlot\n")
+                                        sb.append("    iload $intSlot\n")
+                                        sb.append("    i2d\n")
+                                        sb.append("    dload $realSlot\n")
+                                        sb.append("    ddiv\n")
+                                    } else {
+                                        sb.append("    ddiv\n")
+                                    }
+                                }
+                                "Rem" -> {
+                                    if (argType is ClassName.Simple && argType.name == "Integer") {
+                                        val intSlot = methodSymbol.symbolTable.getAllSymbols().size + 1
+                                        val realSlot = intSlot + 1
+                                        sb.append("    istore $intSlot\n")
+                                        sb.append("    dstore $realSlot\n")
+                                        sb.append("    iload $intSlot\n")
+                                        sb.append("    i2d\n")
+                                        sb.append("    dload $realSlot\n")
+                                        sb.append("    drem\n")
+                                    } else {
+                                        sb.append("    drem\n")
+                                    }
+                                }
+                                "UnaryMinus" -> {
+                                    // Унарный минус для Real: -x
+                                    sb.append("    dneg\n")
+                                }
+                                "toInteger" -> {
+                                    // Real → Integer
+                                    sb.append("    d2i\n")
+                                }
+                                "Equal" -> {
+                                    if (argType is ClassName.Simple && argType.name == "Integer") {
+                                        val intSlot = methodSymbol.symbolTable.getAllSymbols().size + 1
+                                        val realSlot = intSlot + 1
+                                        sb.append("    istore $intSlot\n")
+                                        sb.append("    dstore $realSlot\n")
+                                        sb.append("    iload $intSlot\n")
+                                        sb.append("    i2d\n")
+                                        sb.append("    dload $realSlot\n")
+                                        val trueLabel = newLabel("Lreq_true_")
+                                        val endLabel = newLabel("Lreq_end_")
+                                        sb.append("    dcmpg\n")
+                                        sb.append("    ifeq $trueLabel\n")
+                                        sb.append("    iconst_0\n")
+                                        sb.append("    goto $endLabel\n")
+                                        sb.append("$trueLabel:\n")
+                                        sb.append("    iconst_1\n")
+                                        sb.append("$endLabel:\n")
+                                    } else {
+                                        val trueLabel = newLabel("Lreq_true_")
+                                        val endLabel = newLabel("Lreq_end_")
+                                        sb.append("    dcmpg\n")
+                                        sb.append("    ifeq $trueLabel\n")
+                                        sb.append("    iconst_0\n")
+                                        sb.append("    goto $endLabel\n")
+                                        sb.append("$trueLabel:\n")
+                                        sb.append("    iconst_1\n")
+                                        sb.append("$endLabel:\n")
+                                    }
+                                }
+                                "NotEqual" -> {
+                                    if (argType is ClassName.Simple && argType.name == "Integer") {
+                                        val intSlot = methodSymbol.symbolTable.getAllSymbols().size + 1
+                                        val realSlot = intSlot + 1
+                                        sb.append("    istore $intSlot\n")
+                                        sb.append("    dstore $realSlot\n")
+                                        sb.append("    iload $intSlot\n")
+                                        sb.append("    i2d\n")
+                                        sb.append("    dload $realSlot\n")
+                                        val trueLabel = newLabel("Lrne_true_")
+                                        val endLabel = newLabel("Lrne_end_")
+                                        sb.append("    dcmpg\n")
+                                        sb.append("    ifne $trueLabel\n")
+                                        sb.append("    iconst_0\n")
+                                        sb.append("    goto $endLabel\n")
+                                        sb.append("$trueLabel:\n")
+                                        sb.append("    iconst_1\n")
+                                        sb.append("$endLabel:\n")
+                                    } else {
+                                        val trueLabel = newLabel("Lrne_true_")
+                                        val endLabel = newLabel("Lrne_end_")
+                                        sb.append("    dcmpg\n")
+                                        sb.append("    ifne $trueLabel\n")
+                                        sb.append("    iconst_0\n")
+                                        sb.append("    goto $endLabel\n")
+                                        sb.append("$trueLabel:\n")
+                                        sb.append("    iconst_1\n")
+                                        sb.append("$endLabel:\n")
+                                    }
+                                }
+                                "Less" -> {
+                                    if (argType is ClassName.Simple && argType.name == "Integer") {
+                                        val intSlot = methodSymbol.symbolTable.getAllSymbols().size + 1
+                                        val realSlot = intSlot + 1
+                                        sb.append("    istore $intSlot\n")
+                                        sb.append("    dstore $realSlot\n")
+                                        sb.append("    iload $intSlot\n")
+                                        sb.append("    i2d\n")
+                                        sb.append("    dload $realSlot\n")
+                                        val trueLabel = newLabel("Lrlt_true_")
+                                        val endLabel = newLabel("Lrlt_end_")
+                                        sb.append("    dcmpg\n")
+                                        sb.append("    iflt $trueLabel\n")
+                                        sb.append("    iconst_0\n")
+                                        sb.append("    goto $endLabel\n")
+                                        sb.append("$trueLabel:\n")
+                                        sb.append("    iconst_1\n")
+                                        sb.append("$endLabel:\n")
+                                    } else {
+                                        val trueLabel = newLabel("Lrlt_true_")
+                                        val endLabel = newLabel("Lrlt_end_")
+                                        sb.append("    dcmpg\n")
+                                        sb.append("    iflt $trueLabel\n")
+                                        sb.append("    iconst_0\n")
+                                        sb.append("    goto $endLabel\n")
+                                        sb.append("$trueLabel:\n")
+                                        sb.append("    iconst_1\n")
+                                        sb.append("$endLabel:\n")
+                                    }
+                                }
+                                "Greater" -> {
+                                    if (argType is ClassName.Simple && argType.name == "Integer") {
+                                        val intSlot = methodSymbol.symbolTable.getAllSymbols().size + 1
+                                        val realSlot = intSlot + 1
+                                        sb.append("    istore $intSlot\n")
+                                        sb.append("    dstore $realSlot\n")
+                                        sb.append("    iload $intSlot\n")
+                                        sb.append("    i2d\n")
+                                        sb.append("    dload $realSlot\n")
+                                        val trueLabel = newLabel("Lrgt_true_")
+                                        val endLabel = newLabel("Lrgt_end_")
+                                        sb.append("    dcmpg\n")
+                                        sb.append("    ifgt $trueLabel\n")
+                                        sb.append("    iconst_0\n")
+                                        sb.append("    goto $endLabel\n")
+                                        sb.append("$trueLabel:\n")
+                                        sb.append("    iconst_1\n")
+                                        sb.append("$endLabel:\n")
+                                    } else {
+                                        val trueLabel = newLabel("Lrgt_true_")
+                                        val endLabel = newLabel("Lrgt_end_")
+                                        sb.append("    dcmpg\n")
+                                        sb.append("    ifgt $trueLabel\n")
+                                        sb.append("    iconst_0\n")
+                                        sb.append("    goto $endLabel\n")
+                                        sb.append("$trueLabel:\n")
+                                        sb.append("    iconst_1\n")
+                                        sb.append("$endLabel:\n")
+                                    }
+                                }
+                                "LessEqual" -> {
+                                    if (argType is ClassName.Simple && argType.name == "Integer") {
+                                        val intSlot = methodSymbol.symbolTable.getAllSymbols().size + 1
+                                        val realSlot = intSlot + 1
+                                        sb.append("    istore $intSlot\n")
+                                        sb.append("    dstore $realSlot\n")
+                                        sb.append("    iload $intSlot\n")
+                                        sb.append("    i2d\n")
+                                        sb.append("    dload $realSlot\n")
+                                        val trueLabel = newLabel("Lrle_true_")
+                                        val endLabel = newLabel("Lrle_end_")
+                                        sb.append("    dcmpg\n")
+                                        sb.append("    ifle $trueLabel\n")
+                                        sb.append("    iconst_0\n")
+                                        sb.append("    goto $endLabel\n")
+                                        sb.append("$trueLabel:\n")
+                                        sb.append("    iconst_1\n")
+                                        sb.append("$endLabel:\n")
+                                    } else {
+                                        val trueLabel = newLabel("Lrle_true_")
+                                        val endLabel = newLabel("Lrle_end_")
+                                        sb.append("    dcmpg\n")
+                                        sb.append("    ifle $trueLabel\n")
+                                        sb.append("    iconst_0\n")
+                                        sb.append("    goto $endLabel\n")
+                                        sb.append("$trueLabel:\n")
+                                        sb.append("    iconst_1\n")
+                                        sb.append("$endLabel:\n")
+                                    }
+                                }
+                                "GreaterEqual" -> {
+                                    if (argType is ClassName.Simple && argType.name == "Integer") {
+                                        val intSlot = methodSymbol.symbolTable.getAllSymbols().size + 1
+                                        val realSlot = intSlot + 1
+                                        sb.append("    istore $intSlot\n")
+                                        sb.append("    dstore $realSlot\n")
+                                        sb.append("    iload $intSlot\n")
+                                        sb.append("    i2d\n")
+                                        sb.append("    dload $realSlot\n")
+                                        val trueLabel = newLabel("Lrge_true_")
+                                        val endLabel = newLabel("Lrge_end_")
+                                        sb.append("    dcmpg\n")
+                                        sb.append("    ifge $trueLabel\n")
+                                        sb.append("    iconst_0\n")
+                                        sb.append("    goto $endLabel\n")
+                                        sb.append("$trueLabel:\n")
+                                        sb.append("    iconst_1\n")
+                                        sb.append("$endLabel:\n")
+                                    } else {
+                                        val trueLabel = newLabel("Lrge_true_")
+                                        val endLabel = newLabel("Lrge_end_")
+                                        sb.append("    dcmpg\n")
+                                        sb.append("    ifge $trueLabel\n")
+                                        sb.append("    iconst_0\n")
+                                        sb.append("    goto $endLabel\n")
+                                        sb.append("$trueLabel:\n")
+                                        sb.append("    iconst_1\n")
+                                        sb.append("$endLabel:\n")
+                                    }
                                 }
                                 else -> error("Unknown Real method '${call.method}'")
                             }
                         }
-                        "Bool" -> {
-                            error("Builtin method calls for type 'Bool' not implemented")
+                        "Bool", "Boolean" -> {
+                            when (call.method) {
+                                "Equal" -> {
+                                    // стек: [x, y] - сравниваем два bool значения (хранятся как int 0/1)
+                                    val trueLabel = newLabel("Lbeq_true_")
+                                    val endLabel = newLabel("Lbeq_end_")
+                                    sb.append("    if_icmpeq $trueLabel\n")
+                                    sb.append("    iconst_0\n")  // false
+                                    sb.append("    goto $endLabel\n")
+                                    sb.append("$trueLabel:\n")
+                                    sb.append("    iconst_1\n")  // true
+                                    sb.append("$endLabel:\n")
+                                }
+                                "NotEqual" -> {
+                                    val trueLabel = newLabel("Lbne_true_")
+                                    val endLabel = newLabel("Lbne_end_")
+                                    sb.append("    if_icmpne $trueLabel\n")
+                                    sb.append("    iconst_0\n")
+                                    sb.append("    goto $endLabel\n")
+                                    sb.append("$trueLabel:\n")
+                                    sb.append("    iconst_1\n")
+                                    sb.append("$endLabel:\n")
+                                }
+                                "And" -> {
+                                    // Boolean AND: x && y
+                                    // Стек: [x, y] где x и y это 0 или 1
+                                    // Результат: 1 если оба 1, иначе 0
+                                    val trueLabel = newLabel("Lband_true_")
+                                    val endLabel = newLabel("Lband_end_")
+                                    sb.append("    iand\n")  // побитовое AND (уже работает для 0/1)
+                                    sb.append("    ifne $trueLabel\n")
+                                    sb.append("    iconst_0\n")
+                                    sb.append("    goto $endLabel\n")
+                                    sb.append("$trueLabel:\n")
+                                    sb.append("    iconst_1\n")
+                                    sb.append("$endLabel:\n")
+                                }
+                                "Or" -> {
+                                    // Boolean OR: x || y
+                                    // Стек: [x, y]
+                                    val trueLabel = newLabel("Lbor_true_")
+                                    val endLabel = newLabel("Lbor_end_")
+                                    sb.append("    ior\n")  // побитовое OR
+                                    sb.append("    ifne $trueLabel\n")
+                                    sb.append("    iconst_0\n")
+                                    sb.append("    goto $endLabel\n")
+                                    sb.append("$trueLabel:\n")
+                                    sb.append("    iconst_1\n")
+                                    sb.append("$endLabel:\n")
+                                }
+                                "Xor" -> {
+                                    // Boolean XOR: x ^ y (true если один true, но не оба)
+                                    val trueLabel = newLabel("Lbxor_true_")
+                                    val endLabel = newLabel("Lbxor_end_")
+                                    sb.append("    ixor\n")  // XOR для int (0^0=0, 0^1=1, 1^0=1, 1^1=0)
+                                    sb.append("    ifne $trueLabel\n")
+                                    sb.append("    iconst_0\n")
+                                    sb.append("    goto $endLabel\n")
+                                    sb.append("$trueLabel:\n")
+                                    sb.append("    iconst_1\n")
+                                    sb.append("$endLabel:\n")
+                                }
+                                "Not" -> {
+                                    // Boolean NOT: !x
+                                    // 0 (false) -> 1 (true), 1 (true) -> 0 (false)
+                                    val trueLabel = newLabel("Lbnot_true_")
+                                    val endLabel = newLabel("Lbnot_end_")
+                                    sb.append("    ifeq $trueLabel\n")  // если false (0), результат true
+                                    sb.append("    iconst_0\n")  // если true (не 0), результат false
+                                    sb.append("    goto $endLabel\n")
+                                    sb.append("$trueLabel:\n")
+                                    sb.append("    iconst_1\n")  // true
+                                    sb.append("$endLabel:\n")
+                                }
+                                "toInteger" -> {
+                                    // Boolean → Integer (0 или 1, уже является int)
+                                    // Ничего не делаем, Boolean уже хранится как int
+                                }
+                                else -> error("Unknown Bool method '${call.method}'")
+                            }
                         }
                         else -> error("Builtin method calls for type '${receiverType.name}' not implemented")
                     }
@@ -629,8 +1493,32 @@ class JasminCodeGenerator(
                 return
             }
 
+            // Если тип - встроенный, уже обработали выше
+            if (isBuiltin(receiverType)) {
+                error("Builtin type '${receiverType}' should have been handled earlier")
+            }
+            
+            // Если тип - Unknown, не можем определить класс
+            if (receiverType is ClassName.Simple && receiverType.name == "Unknown") {
+                // Пытаемся обработать как встроенный тип, если метод известен
+                // Это может помочь, если тип не был правильно определен
+                if (call.method in listOf("Equal", "NotEqual") && call.args.size == 1) {
+                    // Попробуем обработать как Bool.Equal
+                    val trueLabel = newLabel("Lbeq_true_")
+                    val endLabel = newLabel("Lbeq_end_")
+                    sb.append("    if_icmpeq $trueLabel\n")
+                    sb.append("    iconst_0\n")
+                    sb.append("    goto $endLabel\n")
+                    sb.append("$trueLabel:\n")
+                    sb.append("    iconst_1\n")
+                    sb.append("$endLabel:\n")
+                    return
+                }
+                error("Cannot determine receiver class for call: receiver type is Unknown. Call: ${call.receiver} -> ${call.method}")
+            }
+            
             val recvClass = classTable.getClass(receiverType)
-                ?: error("Unknown receiver class for call: $receiverType")
+                ?: error("Unknown receiver class for call: $receiverType. Call: ${call.receiver} -> ${call.method}")
 
             val targetMethod = resolveMethodForCall(
                 ownerClass = recvClass,
@@ -684,10 +1572,161 @@ class JasminCodeGenerator(
                 val receiverType: ClassName?
                 if (expr.receiver != null) {
                     receiverType = inferExprType(expr.receiver, classSymbol, methodSymbol)
+                    
+                    // Определяем тип первого аргумента для перегрузки методов
+                    val argType = if (expr.args.isNotEmpty()) {
+                        inferExprType(expr.args[0], classSymbol, methodSymbol)
+                    } else {
+                        null
+                    }
+                    
+                    // Обработка методов для Integer с учетом перегрузок
+                    if (receiverType is ClassName.Simple && receiverType.name == "Integer") {
+                        when (expr.method) {
+                            // Методы конвертации
+                            "toReal" -> return ClassName.Simple("Real")
+                            "toBoolean" -> return ClassName.Simple("Bool")
+                            // Унарные операции
+                            "UnaryMinus" -> return ClassName.Simple("Integer")
+                            // Арифметические операции с перегрузкой
+                            "Plus" -> {
+                                if (argType is ClassName.Simple && argType.name == "Real") {
+                                    return ClassName.Simple("Real")  // Integer + Real → Real
+                                }
+                                return ClassName.Simple("Integer")  // Integer + Integer → Integer
+                            }
+                            "Mult" -> {
+                                if (argType is ClassName.Simple && argType.name == "Real") {
+                                    return ClassName.Simple("Real")
+                                }
+                                return ClassName.Simple("Integer")
+                            }
+                            "Minus" -> {
+                                if (argType is ClassName.Simple && argType.name == "Real") {
+                                    return ClassName.Simple("Real")
+                                }
+                                return ClassName.Simple("Integer")
+                            }
+                            "Div" -> {
+                                if (argType is ClassName.Simple && argType.name == "Real") {
+                                    return ClassName.Simple("Real")
+                                }
+                                return ClassName.Simple("Integer")
+                            }
+                            "Rem" -> {
+                                if (argType is ClassName.Simple && argType.name == "Real") {
+                                    return ClassName.Simple("Real")
+                                }
+                                return ClassName.Simple("Integer")
+                            }
+                            // Операции сравнения возвращают Bool (для Integer и Real)
+                            "Equal", "NotEqual", "Less", "Greater", "LessEqual", "GreaterEqual" -> {
+                                return ClassName.Simple("Bool")
+                            }
+                            else -> {}
+                        }
+                    }
+                    
+                    // Обработка методов для Real с учетом перегрузок
+                    if (receiverType is ClassName.Simple && receiverType.name == "Real") {
+                        when (expr.method) {
+                            "toInteger" -> return ClassName.Simple("Integer")
+                            "UnaryMinus" -> return ClassName.Simple("Real")
+                            "Plus", "Mult", "Minus", "Div", "Rem" -> return ClassName.Simple("Real")
+                            "Equal", "NotEqual", "Less", "Greater", "LessEqual", "GreaterEqual" -> {
+                                return ClassName.Simple("Bool")
+                            }
+                            else -> {}
+                        }
+                    }
+                    
+                    // Обработка методов для Boolean
+                    if (receiverType is ClassName.Simple && (receiverType.name == "Bool" || receiverType.name == "Boolean")) {
+                        when (expr.method) {
+                            "toInteger" -> return ClassName.Simple("Integer")
+                            "Equal", "NotEqual", "And", "Or", "Xor", "Not" -> {
+                                return ClassName.Simple("Bool")
+                            }
+                            else -> {}
+                        }
+                    }
+                    
+                    // Обработка методов для Array[T]
+                    if (receiverType is ClassName.Generic && receiverType.name == "Array") {
+                        when (expr.method) {
+                            "Length" -> return ClassName.Simple("Integer")
+                            "get" -> {
+                                // Array[T].get() -> T
+                                if (receiverType.typeArgs.isNotEmpty()) {
+                                    return receiverType.typeArgs[0]
+                                }
+                                return ClassName.Simple("Unknown")
+                            }
+                            "set" -> return ClassName.Simple("void")
+                            else -> {}
+                        }
+                    }
                 } else {
                     receiverType = ClassName.Simple(classSymbol.name) // вызов метода своего класса
                 }
 
+                // Если receiverType - встроенный тип, определяем тип результата (fallback)
+                if (isBuiltin(receiverType)) {
+                    when (receiverType) {
+                        is ClassName.Simple -> when (receiverType.name) {
+                            "Integer" -> {
+                                val argType = if (expr.args.isNotEmpty()) {
+                                    inferExprType(expr.args[0], classSymbol, methodSymbol)
+                                } else null
+                                when (expr.method) {
+                                    "Plus", "Mult", "Minus", "Div", "Rem", "UnaryMinus" -> {
+                                        if (argType is ClassName.Simple && argType.name == "Real") {
+                                            return ClassName.Simple("Real")
+                                        }
+                                        return ClassName.Simple("Integer")
+                                    }
+                                    "toReal" -> return ClassName.Simple("Real")
+                                    "toBoolean" -> return ClassName.Simple("Bool")
+                                    "Equal", "NotEqual", "Less", "Greater", "LessEqual", "GreaterEqual" -> return ClassName.Simple("Bool")
+                                    else -> return ClassName.Simple("Unknown")
+                                }
+                            }
+                            "Real" -> {
+                                when (expr.method) {
+                                    "Plus", "Mult", "Minus", "Div", "Rem", "UnaryMinus" -> return ClassName.Simple("Real")
+                                    "toInteger" -> return ClassName.Simple("Integer")
+                                    "Equal", "NotEqual", "Less", "Greater", "LessEqual", "GreaterEqual" -> return ClassName.Simple("Bool")
+                                    else -> return ClassName.Simple("Unknown")
+                                }
+                            }
+                            "Bool", "Boolean" -> {
+                                when (expr.method) {
+                                    "Equal", "NotEqual", "And", "Or", "Xor", "Not" -> return ClassName.Simple("Bool")
+                                    "toInteger" -> return ClassName.Simple("Integer")
+                                    else -> return ClassName.Simple("Unknown")
+                                }
+                            }
+                            else -> return ClassName.Simple("Unknown")
+                        }
+                        is ClassName.Generic -> when (receiverType.name) {
+                            "Array" -> {
+                                when (expr.method) {
+                                    "Length" -> return ClassName.Simple("Integer")
+                                    "get" -> {
+                                        if (receiverType.typeArgs.isNotEmpty()) {
+                                            return receiverType.typeArgs[0]
+                                        }
+                                        return ClassName.Simple("Unknown")
+                                    }
+                                    "set" -> return ClassName.Simple("void")
+                                    else -> return ClassName.Simple("Unknown")
+                                }
+                            }
+                            else -> return ClassName.Simple("Unknown")
+                        }
+                    }
+                }
+                
                 val ownerClass = classTable.getClass(receiverType)
                     ?: return ClassName.Simple("Unknown")
 
@@ -790,8 +1829,7 @@ class JasminCodeGenerator(
         } ?: error("No suitable method '$methodName' found in class '${ownerClass.name}'")
         return matched
     }
-
-
+    
     //metrics for recognize amount of if and while
     companion object {
         private var labelCounter = 0

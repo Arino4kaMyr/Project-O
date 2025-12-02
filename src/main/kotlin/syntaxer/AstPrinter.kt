@@ -28,7 +28,7 @@ object AstPrinter {
         when (member) {
             is MemberDecl.VarDecl -> {
                 val connector = if (isLast) "└── " else "├── "
-                val varType = extractTypeFromInit(member.init)
+                val varType = member.type
                 println("$indent$connector Field: ${member.name} : ${classNameToString(varType)}")
             }
             is MemberDecl.MethodDecl -> {
@@ -59,7 +59,7 @@ object AstPrinter {
                 // Локальные переменные
                 body.vars.forEachIndexed { index, varDecl ->
                     val connector = if (index == body.vars.size - 1 && body.stmts.isEmpty()) "└── " else "├── "
-                    val varType = extractTypeFromInit(varDecl.init)
+                    val varType = varDecl.type
                     println("$indent$connector Local Var: ${varDecl.name} : ${classNameToString(varType)}")
                 }
                 
@@ -140,6 +140,10 @@ object AstPrinter {
     private fun classNameToString(className: ClassName): String {
         return when (className) {
             is ClassName.Simple -> className.name
+            is ClassName.Generic -> {
+                val typeArgsStr = className.typeArgs.joinToString(", ") { classNameToString(it) }
+                "${className.name}[$typeArgsStr]"
+            }
         }
     }
 }

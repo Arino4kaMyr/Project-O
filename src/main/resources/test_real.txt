@@ -1,0 +1,49 @@
+# Тест Real - арифметика, сравнения, конвертации
+class Program is
+  method main() is
+    print(2000)
+    var x : Real(3.5)
+    var y : Real(2.5)
+    
+    # Арифметические операции Real
+    var sum_r : Real()
+    sum_r := x.Plus(y)  # 6.0
+    print(sum_r)
+    var diff_r : Real()
+    diff_r := x.Minus(y)  # 1.0
+    print(diff_r)
+    var prod_r : Real()
+    prod_r := x.Mult(y)  # 8.75
+    print(prod_r)
+    var quot_r : Real()
+    quot_r := x.Div(y)  # 1.4
+    print(quot_r)
+    
+    # Унарный минус Real
+    var neg_r : Real()
+    neg_r := x.UnaryMinus()  # -3.5
+    print(neg_r)
+    
+    # Сравнения Real
+    var eq_r : Bool()
+    eq_r := x.Equal(y)  # false
+    print(eq_r)
+    var ne_r : Bool()
+    ne_r := x.NotEqual(y)  # true
+    print(ne_r)
+    var lt_r : Bool()
+    lt_r := x.Less(y)  # false
+    print(lt_r)
+    var gt_r : Bool()
+    gt_r := x.Greater(y)  # true
+    print(gt_r)
+    
+    # Конвертация Real
+    var int_from_real : Integer()
+    int_from_real := x.toInteger()  # 3
+    print(int_from_real)
+    
+    print(9999)
+  end
+end
+

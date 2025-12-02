@@ -1,0 +1,22 @@
+# Тест сложных выражений
+class Program is
+  method main() is
+    print(8000)
+    var a : Integer(5)
+    var b : Integer(3)
+    var c : Integer(2)
+    var int_val : Integer(10)
+    var real_val : Real(3.5)
+    
+    var complex : Integer()
+    complex := a.Plus(b).Mult(c)  # (5+3)*2 = 16
+    print(complex)
+    
+    var chain : Real()
+    chain := int_val.toReal().Plus(real_val)  # 10.0 + 3.5 = 13.5
+    print(chain)
+    
+    print(9999)
+  end
+end
+

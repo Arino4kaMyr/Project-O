@@ -27,7 +27,11 @@ class ClassTable {
      */
     fun getClass(name: ClassName): ClassSymbol? {
         return when (name) {
-            is ClassName.Simple -> classes[name.name] //only simple class exists in compiler
+            is ClassName.Simple -> classes[name.name]
+            is ClassName.Generic -> {
+                // Дженерики (Array) - встроенные типы, не находятся в таблице классов
+                null
+            }
         }
     }
 
@@ -58,6 +62,15 @@ class ClassTable {
                 cls.fields.values.forEach { field ->
                     val typeName = when (field.type) {
                         is ClassName.Simple -> field.type.name
+                        is ClassName.Generic -> {
+                            val typeArgsStr = field.type.typeArgs.joinToString(", ") { 
+                                when (it) {
+                                    is ClassName.Simple -> it.name
+                                    is ClassName.Generic -> "${it.name}[...]"
+                                }
+                            }
+                            "${field.type.name}[$typeArgsStr]"
+                        }
                     }
                     println("    ${field.name} : $typeName")
                 }
@@ -70,8 +83,35 @@ class ClassTable {
             } else {
                 cls.methods.forEach { (methodName, methodList) ->
                     methodList.forEach { method ->
-                        val paramsStr = method.params.joinToString(", ") { "${it.name}: ${when(it.type) { is ClassName.Simple -> it.type.name } }" }
-                        val returnTypeStr = method.returnType?.let { when(it) { is ClassName.Simple -> it.name } } ?: "void"
+                        val paramsStr = method.params.joinToString(", ") { param ->
+                            val paramTypeStr = when (param.type) {
+                                is ClassName.Simple -> param.type.name
+                                is ClassName.Generic -> {
+                                    val typeArgsStr = param.type.typeArgs.joinToString(", ") {
+                                        when (it) {
+                                            is ClassName.Simple -> it.name
+                                            is ClassName.Generic -> "${it.name}[...]"
+                                        }
+                                    }
+                                    "${param.type.name}[$typeArgsStr]"
+                                }
+                            }
+                            "${param.name}: $paramTypeStr"
+                        }
+                        val returnTypeStr = method.returnType?.let { retType ->
+                            when (retType) {
+                                is ClassName.Simple -> retType.name
+                                is ClassName.Generic -> {
+                                    val typeArgsStr = retType.typeArgs.joinToString(", ") {
+                                        when (it) {
+                                            is ClassName.Simple -> it.name
+                                            is ClassName.Generic -> "${it.name}[...]"
+                                        }
+                                    }
+                                    "${retType.name}[$typeArgsStr]"
+                                }
+                            }
+                        } ?: "void"
                         println("    ${method.name}($paramsStr) : $returnTypeStr")
                         
                         // Таблица символов метода

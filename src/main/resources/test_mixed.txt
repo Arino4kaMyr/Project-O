@@ -1,0 +1,44 @@
+# Тест смешанных операций Integer и Real
+class Program is
+  method main() is
+    print(3000)
+    var int_val : Integer(10)
+    var real_val : Real(3.5)
+    
+    # Integer + Real → Real
+    var mixed_sum : Real()
+    mixed_sum := int_val.Plus(real_val)  # 13.5
+    print(mixed_sum)
+    
+    # Integer - Real → Real
+    var mixed_diff : Real()
+    mixed_diff := int_val.Minus(real_val)  # 6.5
+    print(mixed_diff)
+    
+    # Integer * Real → Real
+    var mixed_prod : Real()
+    mixed_prod := int_val.Mult(real_val)  # 35.0
+    print(mixed_prod)
+    
+    # Integer / Real → Real
+    var mixed_quot : Real()
+    mixed_quot := int_val.Div(real_val)  # ~2.857
+    print(mixed_quot)
+    
+    # Real + Integer → Real
+    var mixed_sum2 : Real()
+    mixed_sum2 := real_val.Plus(int_val)  # 13.5
+    print(mixed_sum2)
+    
+    # Integer < Real → Bool
+    var mixed_lt : Bool()
+    mixed_lt := int_val.Less(real_val)  # false
+    print(mixed_lt)
+    var mixed_gt : Bool()
+    mixed_gt := int_val.Greater(real_val)  # true
+    print(mixed_gt)
+    
+    print(9999)
+  end
+end
+

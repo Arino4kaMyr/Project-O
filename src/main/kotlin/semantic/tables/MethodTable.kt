@@ -80,6 +80,15 @@ class MethodTable {
                 val symbol = info.symbol
                 val typeName = when (symbol.type) {
                     is ClassName.Simple -> symbol.type.name
+                    is ClassName.Generic -> {
+                        val typeArgsStr = symbol.type.typeArgs.joinToString(", ") {
+                            when (it) {
+                                is ClassName.Simple -> it.name
+                                is ClassName.Generic -> "${it.name}[...]"
+                            }
+                        }
+                        "${symbol.type.name}[$typeArgsStr]"
+                    }
                 }
                 println("${indent}${symbol.name} : $typeName (index=${info.index})")
             }

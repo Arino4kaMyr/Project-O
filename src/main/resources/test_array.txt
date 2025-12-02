@@ -1,0 +1,57 @@
+# Тест Array[Integer] и Array[Real] - создание, set, get, Length
+class Program is
+  method main() is
+    print(5000)
+    # ========== Тест Array[Integer] ==========
+    var arr : Array[Integer](5)  # массив из 5 элементов
+    
+    # Установка значений
+    arr.set(0, 10)
+    arr.set(1, 20)
+    arr.set(2, 30)
+    arr.set(3, 40)
+    arr.set(4, 50)
+    
+    # Получение значений
+    var elem0 : Integer()
+    elem0 := arr.get(0)  # 10
+    print(elem0)
+    var elem1 : Integer()
+    elem1 := arr.get(1)  # 20
+    print(elem1)
+    var elem2 : Integer()
+    elem2 := arr.get(2)  # 30
+    print(elem2)
+    
+    # Длина массива
+    var len : Integer()
+    len := arr.Length()  # 5
+    print(len)
+    
+    # Изменение значения
+    arr.set(0, 100)
+    var new_elem0 : Integer()
+    new_elem0 := arr.get(0)  # 100
+    print(new_elem0)
+    
+    print(6000)
+    # ========== Тест Array[Real] ==========
+    var arr_real : Array[Real](3)
+    arr_real.set(0, 1.5)
+    arr_real.set(1, 2.5)
+    arr_real.set(2, 3.5)
+    
+    var r0 : Real()
+    r0 := arr_real.get(0)  # 1.5
+    print(r0)
+    var r1 : Real()
+    r1 := arr_real.get(1)  # 2.5
+    print(r1)
+    var r_len : Integer()
+    r_len := arr_real.Length()  # 3
+    print(r_len)
+    
+    print(9999)
+  end
+end
+

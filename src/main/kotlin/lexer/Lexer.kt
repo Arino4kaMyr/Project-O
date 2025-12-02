@@ -10,7 +10,7 @@ class Lexer {
     fun isDigit(c: Char) = c.isDigit()
     fun isEmpty(c: Char) = c.isWhitespace() || c == '\n'
     val symbols = setOf(':', ';', '.', ',', '(', ')', '[', ']', '{', '}', '"', '=')
-    val numRegex = Regex("^\\d+(\\.\\d+)?$")
+    val numRegex = Regex("^-?\\d+(\\.\\d+)?$")
 
     private fun addToken(tokens: MutableList<Token>, text: String, type: TokenType, line: Int, error: String? = null) {
         tokens.add(Token(text, type, line, error))
@@ -71,6 +71,13 @@ class Lexer {
                             token.append(c)
                             state = State.NUM
                             i++
+                        }
+                        c == '-' && i + 1 < text.length && isDigit(text[i + 1]) -> {
+                            // Отрицательное число: минус, за которым следует цифра
+                            token.append(c)
+                            token.append(text[i + 1])
+                            state = State.NUM
+                            i += 2
                         }
                         c in symbols -> {
                             token.append(c)
@@ -166,7 +173,8 @@ class Lexer {
     companion object {
         private val KEYWORDS = setOf(
             "class", "extends", "is", "end", "var", "method", "this",
-            "return", "while", "loop", "if", "then", "else", "true", "false"
+            "return", "while", "loop", "if", "then", "else", "true", "false",
+            "private", "public"
         )
 
     }

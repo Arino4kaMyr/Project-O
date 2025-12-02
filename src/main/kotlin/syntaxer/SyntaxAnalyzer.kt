@@ -53,11 +53,26 @@ class SyntaxAnalyzer(
 
         // loop until we see 'end'
         while (ts.peek().text != END_OF_CODE_BLOCK) {
+            // Проверяем, есть ли модификатор доступа перед VAR
+            if (ts.matchTokenType(TokenType.KEYWORD) && 
+                (ts.peek().text == "private" || ts.peek().text == "public")) {
+                // Есть модификатор - читаем его и проверяем, что дальше VAR
+                val visibility = parseAccessModifier()
+                if (ts.matchAndNext(TokenType.KEYWORD, VAR)) {
+                    // Модификатор был перед VAR
+                    val v = parseVarDecl(visibility)
+                    members.add(v)
+                    continue
+                }
+            }
+            
             if (ts.matchAndNext(TokenType.KEYWORD, VAR)) {
-                val v = parseVarDecl()
+                // VAR без модификатора
+                val v = parseVarDecl(AccessModifier.PUBLIC)
                 members.add(v)
                 continue
             } else if (ts.matchAndNext(TokenType.KEYWORD, METHOD)) {
+                // Для методов модификаторы доступа не поддерживаются
                 val m = parseMethodDecl()
                 members.add(m)
                 continue
@@ -73,25 +88,47 @@ class SyntaxAnalyzer(
         return members
     }
 
-    private fun parseVarDecl(): MemberDecl.VarDecl {
+    private fun parseAccessModifier(): AccessModifier {
+        if (ts.matchTokenType(TokenType.KEYWORD)) {
+            when (ts.peek().text) {
+                "private" -> {
+                    ts.next()
+                    return AccessModifier.PRIVATE
+                }
+                "public" -> {
+                    ts.next()
+                    return AccessModifier.PUBLIC
+                }
+            }
+        }
+        // По умолчанию public
+        return AccessModifier.PUBLIC
+    }
+
+    private fun parseVarDecl(visibility: AccessModifier = AccessModifier.PUBLIC): MemberDecl.VarDecl {
         val nameTok = ts.expect(TokenType.IDENTIFIER)
         val name = nameTok.text
 
         if (ts.peek().text == ":") ts.next() else throw NotFoundException("Expected ':' in var decl, got ${ts.peek().text} in line ${ts.peek().line}")
 
-        val typeTok = ts.expect(TokenType.IDENTIFIER)
-        val typeName = typeTok.text
+        val typeName = parseType()
+        
+        // Для дженериков нужно сохранить базовое имя
+        val baseTypeName = when (typeName) {
+            is ClassName.Simple -> typeName.name
+            is ClassName.Generic -> typeName.name
+        }
 
         val initExpr: Expr = if (ts.peek().text == OPEN_BRACKET) {
             // constructor-like initializer Type(args)
             val args = parseArgs()
-            Expr.Call(null, typeName, args)
+            Expr.Call(null, baseTypeName, args)
         } else {
             // no parentheses — just type name as ClassNameExpr
-            Expr.ClassNameExpr(ClassName.Simple(typeName))
+            Expr.ClassNameExpr(typeName)
         }
 
-        return MemberDecl.VarDecl(name, initExpr)
+        return MemberDecl.VarDecl(name, typeName, initExpr, visibility)
     }
 
     private fun parseMethodDecl(): MemberDecl.MethodDecl {
@@ -103,8 +140,7 @@ class SyntaxAnalyzer(
         var returnType: ClassName? = null
         if (ts.peek().text == ":") {
             ts.next()
-            val returnTok = ts.expect(TokenType.IDENTIFIER)
-            returnType = ClassName.Simple(returnTok.text)
+            returnType = parseType()
         }
 
         var methodBody: MethodBody? = null
@@ -131,8 +167,7 @@ class SyntaxAnalyzer(
 
                 if (ts.peek().text == ":") ts.next() else throw NotFoundException("Expected ':' in parameter, got ${ts.peek().text} in line ${ts.peek().line}")
 
-                val typeTok = ts.expect(TokenType.IDENTIFIER)
-                val type = ClassName.Simple(typeTok.text)
+                val type = parseType()
                 params.add(Param(paramName, type))
 
                 if (ts.peek().text == ",") {
@@ -189,8 +224,8 @@ class SyntaxAnalyzer(
                     val nameTok = ts.expect(TokenType.IDENTIFIER)
                     val paramName = nameTok.text
                     if (ts.peek().text == ":") ts.next() else throw NotFoundException("Expected ':' in constructor parameter in line ${ts.peek().line}")
-                    val typeTok = ts.expect(TokenType.IDENTIFIER)
-                    params.add(Param(paramName, ClassName.Simple(typeTok.text)))
+                    val type = parseType()
+                    params.add(Param(paramName, type))
 
                     if (ts.peek().text == ",") {
                         ts.next()
@@ -299,7 +334,16 @@ class SyntaxAnalyzer(
                     val expr = parseExpr()
                     return Stmt.Assignment("this.${fieldName}", expr)
                 } else {
-                    // Это выражение: this.field или this.field.method() и т.д.
+                    // Это выражение: this.field или this.method() и т.д.
+                    // Проверяем, может ли это быть вызов метода: this.method(args)
+                    if (ts.peek().text == OPEN_BRACKET) {
+                        // Вызов метода: this.method(args)
+                        val args = parseArgs()
+                        val expr = Expr.Call(Expr.This, fieldName, args)
+                        return Stmt.ExprStmt(expr)
+                    }
+                    
+                    // Иначе это доступ к полю: this.field
                     var expr: Expr = Expr.FieldAccess(Expr.This, fieldName)
                     
                     // Обрабатываем цепочку обращений: this.field1.field2.method()...
@@ -453,6 +497,36 @@ class SyntaxAnalyzer(
             }
         }
         throw NotFoundException("Unknown primary expression: ${p.text} in line ${p.line}")
+    }
+
+    /**
+     * Парсинг типа (может быть простым или дженериком)
+     * Поддерживает синтаксис: Integer, Array[Integer], Array[Array[Integer]]
+     */
+    private fun parseType(): ClassName {
+        val typeNameTok = ts.expect(TokenType.IDENTIFIER)
+        val typeName = typeNameTok.text
+        
+        // Проверяем, есть ли параметры типа (дженерики)
+        if (ts.peek().text == "[") {
+            ts.next()  // consume '['
+            val typeArgs = mutableListOf<ClassName>()
+            
+            // Парсим первый аргумент типа
+            typeArgs.add(parseType())
+            
+            // Парсим остальные аргументы (если есть)
+            while (ts.peek().text == ",") {
+                ts.next()  // consume ','
+                typeArgs.add(parseType())
+            }
+            
+            ts.expectText("]")  // expect ']'
+            return ClassName.Generic(typeName, typeArgs)
+        }
+        
+        // Простой тип без дженериков
+        return ClassName.Simple(typeName)
     }
 
     private fun parseArgs(): List<Expr> {

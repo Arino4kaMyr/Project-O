@@ -1,6 +1,7 @@
 import compilation.Compiler
 import compilation.jasmin.JasminCodeGenerator
 import constants.MainConstants
+import exceptions.LexicalException
 import exceptions.SematicException
 import lexer.Lexer
 import semantic.SemanticAnalyzer
@@ -20,14 +21,15 @@ fun main() {
         text = text.removePrefix(MainConstants.DECODE_BYTES)
     }
 
-    val tokens = lexer.scan(text)
+    val tokens = try {
+        lexer.scan(text)
+    } catch (e: LexicalException) {
+        println("\nLexical Error: ${e.message}")
+        exitProcess(1)
+    }
 
     tokens.forEach { token ->
-        if (token.type == TokenType.ERROR) {
-            println("Error: '${token.text}' at line ${token.line} - ${token.errorMessage}")
-        } else {
-            println("${token.text} : ${token.type}" )
-        }
+        println("${token.text} : ${token.type}" )
     }
 
     try {

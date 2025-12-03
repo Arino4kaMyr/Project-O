@@ -1,5 +1,0 @@
-class Test is
-  method main() is
-    var abc@def : Integer
-  end
-end

@@ -1,6 +1,5 @@
 package lexer
 
-import exceptions.LexicalException
 import token.Token
 import token.TokenType
 
@@ -37,9 +36,10 @@ class Lexer {
             
             if (errorMode) {
                 if (isEmpty(c)) {
-                    val line = getLineNumber(tokenStartIndex)
-                    val invalidToken = token.toString()
-                    throw LexicalException("Unknown token '$invalidToken' at line $line")
+                    addToken(tokens, token.toString(), TokenType.ERROR, getLineNumber(tokenStartIndex), "Invalid token")
+                    token.clear()
+                    errorMode = false
+                    i++
                 } else {
                     token.append(c)
                     i++
@@ -96,8 +96,9 @@ class Lexer {
                         }
                         isEmpty(c) -> i++
                         else -> {
-                            val line = getLineNumber(i)
-                            throw LexicalException("Unknown token starting with '$c' at line $line")
+                            token.append(c)
+                            errorMode = true
+                            i++
                         }
                     }
                 }
@@ -113,15 +114,15 @@ class Lexer {
                                 token.clear()
                                 state = State.START
                             } else {
-                                val line = getLineNumber(tokenStartIndex)
-                                val invalidToken = token.toString()
-                                throw LexicalException("Invalid number format '$invalidToken' at line $line")
+                                errorMode = true
+                                state = State.START
                             }
                         }
                         else -> {
-                            val line = getLineNumber(tokenStartIndex)
-                            val invalidToken = token.toString() + c
-                            throw LexicalException("Invalid token '$invalidToken' at line $line")
+                            token.append(c)
+                            errorMode = true
+                            state = State.START
+                            i++
                         }
                     }
                 }
@@ -143,9 +144,10 @@ class Lexer {
                             }
                         }
                         else -> {
-                            val line = getLineNumber(tokenStartIndex)
-                            val invalidToken = token.toString() + c
-                            throw LexicalException("Invalid token '$invalidToken' at line $line")
+                            token.append(c)
+                            errorMode = true
+                            state = State.START
+                            i++
                         }
                     }
                 }
@@ -155,9 +157,7 @@ class Lexer {
 
         if (token.isNotEmpty()) {
             if (errorMode) {
-                val line = getLineNumber(tokenStartIndex)
-                val invalidToken = token.toString()
-                throw LexicalException("Unknown token '$invalidToken' at line $line")
+                addToken(tokens, token.toString(), TokenType.ERROR, getLineNumber(tokenStartIndex), "Invalid token")
             } else {
                 val finalType = when (state) {
                     State.NUM -> TokenType.NUMBER

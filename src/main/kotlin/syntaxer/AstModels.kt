@@ -16,7 +16,6 @@ enum class AccessModifier {
 
 sealed class MemberDecl {
     data class VarDecl(val name: String, val type: ClassName, val init: Expr, val visibility: AccessModifier = AccessModifier.PUBLIC) : MemberDecl()
-    //method without returnType is a void method. Without body is a declared method only
     data class MethodDecl(val name: String, val params: List<Param>, val returnType: ClassName?, val body: MethodBody?) : MemberDecl()
     data class ConstructorDecl(val params: List<Param>, val body: MethodBody) : MemberDecl()
 }

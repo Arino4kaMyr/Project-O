@@ -7,60 +7,42 @@ import syntaxer.*
 class SemanticAnalyzer(private var program: Program) {
     val classTable = ClassTable()
     
-    /**
-     * Получить оптимизированный AST
-     */
     fun getOptimizedProgram(): Program {
         return program
     }
 
     fun analyze() {
-        // Этап 1: Создаем все классы
         program.classes.forEach { classDecl ->
             val className = (classDecl.name as ClassName.Simple).name
             val classSymbol = ClassSymbol(className, classDecl)
             classTable.addClass(classSymbol)
         }
 
-        // Проверка, что существует класс Program
         if (!classTable.contains("Program")) throw SematicException("Program class doesn't exist")
 
-        // Этап 2: Разрешение наследования
         resolveInheritance()
 
-        // Этап 3: Заполняем таблицы символов каждого класса
         program.classes.forEach { classDecl ->
             val className = (classDecl.name as ClassName.Simple).name
             val classSymbol = classTable.findClass(className)!!
             analyzeClass(classDecl, classSymbol)
         }
 
-        // Этап 4: Разрешение ссылок (Name Resolution)
         resolveReferences()
 
-        // Этап 5: Проверка типов (Type Checking)
         typeCheck()
 
-        // Этап 6: Оптимизации AST
         optimize()
     }
 
-    /**
-     * Этап 2: Разрешение наследования
-     * - Связывает parentClass в ClassSymbol
-     * - Проверяет существование родительских классов
-     * - Проверяет циклы наследования
-     */
     private fun resolveInheritance() {
         program.classes.forEach { classDecl ->
             val className = (classDecl.name as ClassName.Simple).name
             val classSymbol = classTable.findClass(className)!!
 
-            // Если у класса есть родитель
             classDecl.parent?.let { parentName ->
                 when (parentName) {
                     is ClassName.Simple -> {
-                        // Проверка на самонаследование
                         if (parentName.name == className) {
                             throw exceptions.SematicException(
                                 "Class '${className}' cannot extend itself"
@@ -69,18 +51,15 @@ class SemanticAnalyzer(private var program: Program) {
 
                         val parentClass = classTable.findClass(parentName.name)
 
-                        // Проверка существования родительского класса
                         if (parentClass == null) {
                             throw exceptions.SematicException(
                                 "Class '${className}' extends unknown class '${parentName.name}'"
                             )
                         }
 
-                        // Связываем родительский класс
                         classSymbol.parentClass = parentClass
                     }
                     is ClassName.Generic -> {
-                        // Дженерики в наследовании пока не поддерживаются
                         throw exceptions.SematicException(
                             "Generic types in inheritance are not supported yet: ${parentName.name}[...]"
                         )
@@ -89,7 +68,6 @@ class SemanticAnalyzer(private var program: Program) {
             }
         }
 
-        // Проверка циклов наследования
         program.classes.forEach { classDecl ->
             val className = (classDecl.name as ClassName.Simple).name
             val classSymbol = classTable.findClass(className)!!
@@ -106,20 +84,17 @@ class SemanticAnalyzer(private var program: Program) {
         classDecl.members.forEach { member ->
             when (member) {
                 is MemberDecl.VarDecl -> {
-                    // Проверка на дублирование полей
                     if (classSymbol.fields.containsKey(member.name)) {
                         throw exceptions.SematicException(
                             "Duplicate field '${member.name}' in class '${classSymbol.name}'"
                         )
                     }
 
-                    // Поле класса - добавляем в таблицу полей класса
                     val varType = member.type
                     val fieldSymbol = VarSymbol(member.name, varType)
                     classSymbol.fields[member.name] = fieldSymbol
                 }
                 is MemberDecl.MethodDecl -> {
-                    // Проверка на дублирование параметров
                     val paramNames = member.params.map { it.name }
                     val duplicateParams = paramNames.groupingBy { it }.eachCount().filter { it.value > 1 }
                     if (duplicateParams.isNotEmpty()) {
@@ -128,17 +103,14 @@ class SemanticAnalyzer(private var program: Program) {
                         )
                     }
 
-                    // Создаем символ метода
                     val paramSymbols = member.params.map { param ->
                         ParamSymbol(param.name, param.type)
                     }
                     val paramTypes = paramSymbols.map { it.type }
 
-                    // Проверка на переопределение метода родителя
                     classSymbol.parentClass?.let { parent ->
                         val overridden = parent.findMethodBySignature(member.name, paramTypes)
                         if (overridden != null) {
-                            // Проверяем совместимость типов возвращаемых значений
                             val parentReturn = overridden.returnType
                             val childReturn = member.returnType
 
@@ -153,7 +125,6 @@ class SemanticAnalyzer(private var program: Program) {
                         }
                     }
 
-                    // Проверка на дублирование сигнатуры метода (имя + типы параметров)
                     if (classSymbol.hasMethodWithSignature(member.name, paramTypes)) {
                         throw exceptions.SematicException(
                             "Method '${member.name}' with signature (${paramTypes.joinToString(", ") { classNameToString(it) }}) already exists in class '${classSymbol.name}'"
@@ -168,17 +139,14 @@ class SemanticAnalyzer(private var program: Program) {
                     )
                     methodSymbol.ownerClass = classSymbol
 
-                    // Добавляем параметры в таблицу символов метода
                     paramSymbols.forEach { param ->
                         methodSymbol.symbolTable.addParam(param)
                     }
 
-                    // Анализируем тело метода и собираем локальные переменные
                     member.body?.let { body ->
                         analyzeMethodBody(body, methodSymbol.symbolTable, classSymbol.name, member.name)
                     }
 
-                    // Добавляем метод в таблицу методов класса (поддержка перегрузки)
                     if (!classSymbol.methods.containsKey(member.name)) {
                         classSymbol.methods[member.name] = mutableListOf()
                     }
@@ -198,9 +166,7 @@ class SemanticAnalyzer(private var program: Program) {
     ) {
         when (body) {
             is MethodBody.BlockBody -> {
-                // Локальные переменные метода
                 body.vars.forEach { varDecl ->
-                    // Проверка на дублирование локальных переменных
                     if (symbolTable.contains(varDecl.name)) {
                         val location = if (className.isNotEmpty() && methodName.isNotEmpty()) {
                             " in method '${methodName}' of class '${className}'"
@@ -216,7 +182,6 @@ class SemanticAnalyzer(private var program: Program) {
                     symbolTable.addLocalVariable(varDecl.name, varType)
                 }
                 
-                // Анализируем вложенные блоки (if/while)
                 body.stmts.forEach { stmt ->
                     when (stmt) {
                         is Stmt.If -> {
@@ -229,7 +194,6 @@ class SemanticAnalyzer(private var program: Program) {
                             analyzeMethodBody(stmt.body, symbolTable, className, methodName)
                         }
                         else -> {
-                            // Другие statements не содержат объявлений переменных
                         }
                     }
                 }
@@ -238,12 +202,6 @@ class SemanticAnalyzer(private var program: Program) {
     }
 
 
-    /**
-     * Этап 4: Разрешение ссылок (Name Resolution)
-     * - Проверяет, что все используемые переменные объявлены
-     * - Проверяет, что все вызываемые методы существуют
-     * - Проверяет, что все используемые поля существуют
-     */
     private fun resolveReferences() {
         program.classes.forEach { classDecl ->
             val className = (classDecl.name as ClassName.Simple).name
@@ -253,7 +211,6 @@ class SemanticAnalyzer(private var program: Program) {
                 when (member) {
                     is MemberDecl.MethodDecl -> {
                         member.body?.let { body ->
-                            // Находим конкретный метод по сигнатуре
                             val paramTypes = member.params.map { it.type }
                             val methodSymbol = classSymbol.findMethods(member.name).find { method ->
                                 method.params.size == paramTypes.size &&
@@ -268,7 +225,6 @@ class SemanticAnalyzer(private var program: Program) {
                         }
                     }
                     is MemberDecl.ConstructorDecl -> {
-                        // Можно добавить проверку конструкторов позже
                     }
                     else -> {}
                 }
@@ -276,9 +232,6 @@ class SemanticAnalyzer(private var program: Program) {
         }
     }
 
-    /**
-     * Разрешение ссылок в теле метода
-     */
     private fun resolveMethodBody(
         body: MethodBody,
         symbolTable: semantic.tables.MethodTable,
@@ -288,7 +241,6 @@ class SemanticAnalyzer(private var program: Program) {
     ) {
         when (body) {
             is MethodBody.BlockBody -> {
-                // Проверяем все statements
                 body.stmts.forEach { stmt ->
                     resolveStmt(stmt, symbolTable, classSymbol, className, methodName)
                 }
@@ -296,9 +248,6 @@ class SemanticAnalyzer(private var program: Program) {
         }
     }
 
-    /**
-     * Разрешение ссылок в statement
-     */
     private fun resolveStmt(
         stmt: Stmt,
         symbolTable: semantic.tables.MethodTable,
@@ -308,9 +257,7 @@ class SemanticAnalyzer(private var program: Program) {
     ) {
         when (stmt) {
             is Stmt.Assignment -> {
-                // Проверяем, что переменная объявлена
                 resolveVariable(stmt.target, symbolTable, classSymbol, className, methodName)
-                // Проверяем выражение
                 resolveExpr(stmt.expr, symbolTable, classSymbol, className, methodName)
             }
             is Stmt.While -> {
@@ -335,9 +282,6 @@ class SemanticAnalyzer(private var program: Program) {
         }
     }
 
-    /**
-     * Разрешение ссылок в выражении
-     */
     private fun resolveExpr(
         expr: Expr,
         symbolTable: semantic.tables.MethodTable,
@@ -347,28 +291,22 @@ class SemanticAnalyzer(private var program: Program) {
     ) {
         when (expr) {
             is Expr.Identifier -> {
-                // Проверяем, что переменная объявлена
                 resolveVariable(expr.name, symbolTable, classSymbol, className, methodName)
             }
             is Expr.Call -> {
-                // Проверяем receiver (если есть)
                 expr.receiver?.let { receiver ->
                     resolveExpr(receiver, symbolTable, classSymbol, className, methodName)
                 }
 
                 if (expr.receiver == null && expr.method in BUILDIN_METHODS) {
-                    // просто проверяем аргументы, что они корректные выражения
                     expr.args.forEach { arg ->
                         resolveExpr(arg, symbolTable, classSymbol, className, methodName)
                     }
                     return
                 }
 
-                // Проверяем вызов метода
                 if (expr.receiver == null) {
-                    // Проверяем, не является ли это встроенным методом (еще раз, на всякий случай)
                     if (expr.method !in BUILDIN_METHODS) {
-                        // Вызов метода без receiver - проверяем, что метод существует в классе
                         val methods = classSymbol.findMethods(expr.method)
                         if (methods.isEmpty()) {
                             throw exceptions.SematicException(
@@ -377,33 +315,24 @@ class SemanticAnalyzer(private var program: Program) {
                         }
                     }
                 }
-                // Если receiver есть, проверка метода будет на этапе проверки типов
 
-                // Проверяем аргументы
                 expr.args.forEach { arg ->
                     resolveExpr(arg, symbolTable, classSymbol, className, methodName)
                 }
             }
             is Expr.FieldAccess -> {
-                // Проверяем receiver
                 resolveExpr(expr.receiver, symbolTable, classSymbol, className, methodName)
-                // Проверка существования поля будет на этапе проверки типов
             }
             is Expr.This -> {
-                // this всегда валиден в методах
             }
             is Expr.IntLit,
             is Expr.RealLit,
             is Expr.BoolLit,
             is Expr.ClassNameExpr -> {
-                // Литералы и типы не требуют разрешения
             }
         }
     }
 
-    /**
-     * Проверка, что переменная объявлена
-     */
     private fun resolveVariable(
         varName: String,
         symbolTable: semantic.tables.MethodTable,
@@ -411,14 +340,12 @@ class SemanticAnalyzer(private var program: Program) {
         className: String,
         methodName: String
     ) {
-        // Обработка this.field
         val actualVarName = if (varName.startsWith("this.")) {
             varName.removePrefix("this.")
         } else {
             varName
         }
         
-        // Если это this.field, сразу ищем в полях класса
         if (varName.startsWith("this.")) {
             if (classSymbol.findField(actualVarName) != null) {
                 return
@@ -428,29 +355,19 @@ class SemanticAnalyzer(private var program: Program) {
             )
         }
         
-        // Сначала ищем в локальных переменных метода (параметры + локальные)
         if (symbolTable.contains(actualVarName)) {
             return
         }
 
-        // Затем ищем в полях класса (с учетом наследования)
         if (classSymbol.findField(actualVarName) != null) {
             return
         }
 
-        // Переменная не найдена
         throw exceptions.SematicException(
             "Unknown variable '${actualVarName}' in method '${methodName}' of class '${className}'"
         )
     }
 
-    /**
-     * Этап 5: Проверка типов (Type Checking)
-     * - Проверяет типы в присваиваниях
-     * - Проверяет типы аргументов при вызове методов
-     * - Проверяет возвращаемые типы
-     * - Проверяет методы и поля с receiver
-     */
     private fun typeCheck() {
         program.classes.forEach { classDecl ->
             val className = (classDecl.name as ClassName.Simple).name
@@ -460,7 +377,6 @@ class SemanticAnalyzer(private var program: Program) {
                 when (member) {
                     is MemberDecl.MethodDecl -> {
                         member.body?.let { body ->
-                            // Находим конкретный метод по сигнатуре
                             val paramTypes = member.params.map { it.type }
                             val methodSymbol = classSymbol.findMethods(member.name).find { method ->
                                 method.params.size == paramTypes.size &&
@@ -480,9 +396,6 @@ class SemanticAnalyzer(private var program: Program) {
         }
     }
 
-    /**
-     * Проверка типов в теле метода
-     */
     private fun typeCheckMethodBody(
         body: MethodBody,
         symbolTable: semantic.tables.MethodTable,
@@ -499,9 +412,6 @@ class SemanticAnalyzer(private var program: Program) {
         }
     }
 
-    /**
-     * Проверка типов в statement
-     */
     private fun typeCheckStmt(
         stmt: Stmt,
         symbolTable: semantic.tables.MethodTable,
@@ -511,12 +421,9 @@ class SemanticAnalyzer(private var program: Program) {
     ) {
         when (stmt) {
             is Stmt.Assignment -> {
-                // Получаем тип целевой переменной
                 val targetType = getVariableType(stmt.target, symbolTable, classSymbol, className, methodSymbol.name)
-                // Получаем тип выражения
                 val exprType = getTypeOfExpr(stmt.expr, symbolTable, classSymbol, className, methodSymbol.name)
 
-                // Проверяем совместимость типов
                 if (!isAssignable(exprType, targetType, classTable)) {
                     throw exceptions.SematicException(
                         "Type mismatch: cannot assign ${classNameToString(exprType)} to ${classNameToString(targetType)} in assignment '${stmt.target}'"
@@ -525,7 +432,6 @@ class SemanticAnalyzer(private var program: Program) {
             }
             is Stmt.While -> {
                 val condType = getTypeOfExpr(stmt.cond, symbolTable, classSymbol, className, methodSymbol.name)
-                // Условие должно быть булевым (или можно добавить проверку)
                 typeCheckMethodBody(stmt.body, symbolTable, classSymbol, className, methodSymbol)
             }
             is Stmt.If -> {
@@ -548,7 +454,6 @@ class SemanticAnalyzer(private var program: Program) {
                         }
                     }
                 } ?: run {
-                    // return без выражения - должен быть void метод
                     if (methodSymbol.returnType != null) {
                         throw exceptions.SematicException(
                             "Method '${methodSymbol.name}' must return ${classNameToString(methodSymbol.returnType!!)}"
@@ -562,9 +467,6 @@ class SemanticAnalyzer(private var program: Program) {
         }
     }
 
-    /**
-     * Определение типа выражения
-     */
     private fun getTypeOfExpr(
         expr: Expr,
         symbolTable: semantic.tables.MethodTable,
@@ -583,41 +485,33 @@ class SemanticAnalyzer(private var program: Program) {
                 ClassName.Simple(className)
             }
             is Expr.Call -> {
-                // Проверяем встроенные методы СРАЗУ, до любых других проверок
                 if (expr.receiver == null && expr.method in BUILDIN_METHODS) {
-                    // Получаем типы аргументов для проверки
                     expr.args.forEach { arg ->
                         getTypeOfExpr(arg, symbolTable, classSymbol, className, methodName)
                     }
                     return ClassName.Simple("void")
                 }
                 
-                // Получаем типы аргументов
                 val argTypes = expr.args.map { arg ->
                     getTypeOfExpr(arg, symbolTable, classSymbol, className, methodName)
                 }
 
                 if (expr.receiver == null) {
-                    // Проверяем, не является ли это встроенным методом (явная проверка для надежности)
                     if (expr.method in BUILDIN_METHODS) {
                         return ClassName.Simple("void")
                     }
 
-                    // Вызов метода без receiver - разрешение перегрузки
-                    // callerClass = classSymbol (вызываем из того же класса)
                     val method = resolveMethodCall(classSymbol, expr.method, argTypes, className, callerClass = classSymbol)
 
                     method.returnType ?: ClassName.Simple("void")
                 } else {
-                    // Вызов метода с receiver
                     val receiverType = getTypeOfExpr(expr.receiver, symbolTable, classSymbol, className, methodName)
                     val receiverClass = classTable.getClass(receiverType)
 
                     if (receiverClass == null) {
-                        // Встроенный тип (Integer, Real, Bool, Array) - определяем тип возврата
                         val receiverTypeName = when (receiverType) {
                             is ClassName.Simple -> receiverType.name
-                            is ClassName.Generic -> receiverType.name  // Array
+                            is ClassName.Generic -> receiverType.name
                         }
                         if (receiverTypeName != null) {
                             val argType = if (argTypes.isNotEmpty()) argTypes[0] else null
@@ -626,8 +520,6 @@ class SemanticAnalyzer(private var program: Program) {
                         return ClassName.Simple("Unknown")
                     }
 
-                    // Разрешение перегрузки для метода с receiver
-                    // callerClass = classSymbol (класс, из которого вызывается метод)
                     val method = resolveMethodCall(receiverClass, expr.method, argTypes, receiverClass.name, callerClass = classSymbol)
 
                     method.returnType ?: ClassName.Simple("void")
@@ -638,8 +530,6 @@ class SemanticAnalyzer(private var program: Program) {
                 val receiverClass = classTable.getClass(receiverType)
 
                 if (receiverClass == null) {
-                    // Встроенный тип (Array, Integer, etc.) - пропускаем проверку полей
-                    // Возвращаем Unknown, так как не можем определить тип
                     return ClassName.Simple("Unknown")
                 }
 
@@ -658,9 +548,6 @@ class SemanticAnalyzer(private var program: Program) {
         }
     }
 
-    /**
-     * Получить тип переменной
-     */
     private fun getVariableType(
         varName: String,
         symbolTable: semantic.tables.MethodTable,
@@ -668,14 +555,12 @@ class SemanticAnalyzer(private var program: Program) {
         className: String,
         methodName: String
     ): ClassName {
-        // Обработка this.field
         val actualVarName = if (varName.startsWith("this.")) {
             varName.removePrefix("this.")
         } else {
             varName
         }
         
-        // Если это this.field, сразу ищем в полях класса
         if (varName.startsWith("this.")) {
             val field = classSymbol.findField(actualVarName)
             if (field != null) {
@@ -686,13 +571,11 @@ class SemanticAnalyzer(private var program: Program) {
             )
         }
         
-        // Сначала ищем в локальных переменных
         val localVar = symbolTable.findSymbol(actualVarName)
         if (localVar != null) {
             return localVar.type
         }
 
-        // Затем ищем в полях класса
         val field = classSymbol.findField(actualVarName)
         if (field != null) {
             return field.type
@@ -703,39 +586,31 @@ class SemanticAnalyzer(private var program: Program) {
         )
     }
 
-    /**
-     * Проверка совместимости типов (можно ли присвоить fromType к toType)
-     */
     private fun isAssignable(fromType: ClassName, toType: ClassName, classTable: ClassTable): Boolean {
-        // Если типы одинаковые
         if (classNameEquals(fromType, toType)) {
             return true
         }
 
-        // Unknown тип (для встроенных типов) - разрешаем присваивание
         when (fromType) {
             is ClassName.Simple -> {
                 if (fromType.name == "Unknown") {
-                    return true  // Unknown можно присвоить любому типу
+                    return true
                 }
             }
             is ClassName.Generic -> {
-                // Для дженериков проверяем совместимость позже
             }
         }
 
         when (toType) {
             is ClassName.Simple -> {
                 if (toType.name == "Unknown") {
-                    return true  // Любой тип можно присвоить Unknown
+                    return true
                 }
             }
             is ClassName.Generic -> {
-                // Для дженериков проверяем совместимость позже
             }
         }
 
-        // Проверка наследования (fromType является подтипом toType)
         when (fromType) {
             is ClassName.Simple -> {
                 val fromClass = classTable.findClass(fromType.name)
@@ -747,18 +622,14 @@ class SemanticAnalyzer(private var program: Program) {
                         }
                     }
                     is ClassName.Generic -> {
-                        // Дженерики не могут наследоваться от обычных классов
                         return false
                     }
                 }
             }
             is ClassName.Generic -> {
-                // Дженерики могут быть присвоены только дженерикам того же типа
                 if (toType is ClassName.Generic) {
-                    // Проверяем базовый тип и типы аргументов
                     if (fromType.name == toType.name && 
                         fromType.typeArgs.size == toType.typeArgs.size) {
-                        // Проверяем совместимость типов аргументов
                         return fromType.typeArgs.zip(toType.typeArgs).all { (from, to) ->
                             isAssignable(from, to, classTable)
                         }
@@ -771,9 +642,6 @@ class SemanticAnalyzer(private var program: Program) {
         return false
     }
 
-    /**
-     * Сравнение имен классов (поддерживает дженерики)
-     */
     private fun classNameEquals(type1: ClassName, type2: ClassName): Boolean {
         return when {
             type1 is ClassName.Simple && type2 is ClassName.Simple -> type1.name == type2.name
@@ -786,15 +654,6 @@ class SemanticAnalyzer(private var program: Program) {
         }
     }
 
-    /**
-     * Разрешение вызова метода (Method Resolution)
-     * Выбирает правильный метод из перегруженных на основе типов аргументов
-     * @param classSymbol класс-владелец метода
-     * @param methodName имя метода
-     * @param argTypes типы аргументов
-     * @param context контекст для сообщений об ошибках
-     * @param callerClass класс, из которого вызывается метод (для проверки доступа)
-     */
     private fun resolveMethodCall(
         classSymbol: ClassSymbol,
         methodName: String,
@@ -802,7 +661,6 @@ class SemanticAnalyzer(private var program: Program) {
         context: String,
         callerClass: ClassSymbol? = null
     ): MethodSymbol {
-        // Получаем все методы с данным именем
         val candidates = classSymbol.findMethods(methodName)
 
         if (candidates.isEmpty()) {
@@ -811,7 +669,6 @@ class SemanticAnalyzer(private var program: Program) {
             )
         }
 
-        // Фильтруем методы по количеству параметров
         val matchingCount = candidates.filter { it.params.size == argTypes.size }
 
         if (matchingCount.isEmpty()) {
@@ -822,7 +679,6 @@ class SemanticAnalyzer(private var program: Program) {
             )
         }
 
-        // Ищем точное совпадение типов
         val exactMatch = matchingCount.find { method ->
             method.params.size == argTypes.size &&
             method.params.mapIndexed { index, param -> param.type }.zip(argTypes).all { (type1, type2) ->
@@ -833,7 +689,6 @@ class SemanticAnalyzer(private var program: Program) {
             return exactMatch
         }
 
-        // Ищем совместимые методы (где аргументы можно присвоить параметрам)
         val compatibleMethods = matchingCount.filter { method ->
             method.params.mapIndexed { index, param ->
                 isAssignable(argTypes[index], param.type, classTable)
@@ -851,7 +706,6 @@ class SemanticAnalyzer(private var program: Program) {
         }
 
         if (compatibleMethods.size > 1) {
-            // Амбигуация - несколько методов подходят
             val signatures = compatibleMethods.map { method ->
                 method.params.joinToString(", ") { classNameToString(it.type) }
             }.distinct()
@@ -861,13 +715,9 @@ class SemanticAnalyzer(private var program: Program) {
             )
         }
 
-        // Методы всегда доступны (модификаторы доступа для методов не поддерживаются)
         return compatibleMethods.first()
     }
 
-    /**
-     * Преобразование ClassName в строку
-     */
     private fun classNameToString(className: ClassName): String {
         return when (className) {
             is ClassName.Simple -> className.name
@@ -878,9 +728,6 @@ class SemanticAnalyzer(private var program: Program) {
         }
     }
 
-    /**
-     * Определить тип возврата для встроенных методов с учетом перегрузок
-     */
     private fun getBuiltinMethodReturnType(
         receiverType: ClassName,
         receiverTypeName: String,
@@ -932,9 +779,8 @@ class SemanticAnalyzer(private var program: Program) {
                 when (methodName) {
                     "Length" -> ClassName.Simple("Integer")
                     "get" -> {
-                        // get возвращает тип элемента массива
                         if (receiverType is ClassName.Generic && receiverType.typeArgs.isNotEmpty()) {
-                            receiverType.typeArgs[0]  // Array[T].get() -> T
+                            receiverType.typeArgs[0]
                         } else {
                             ClassName.Simple("Unknown")
                         }
@@ -960,14 +806,7 @@ class SemanticAnalyzer(private var program: Program) {
         }
     }
 
-    /**
-     * Этап 6: Оптимизации AST
-     * Оптимизация 1: Удаление недостижимого кода (после return)
-     * Оптимизация 2: Упрощение константных выражений (5.Plus(3) → 8)
-     * Оптимизация 3: Удаление неиспользуемых переменных
-     */
     private fun optimize() {
-        // Создаем оптимизированную версию программы
         val optimizedClasses = program.classes.map { classDecl ->
             val className = (classDecl.name as ClassName.Simple).name
             val classSymbol = classTable.findClass(className)!!
@@ -992,7 +831,6 @@ class SemanticAnalyzer(private var program: Program) {
             ClassDecl(classDecl.name, classDecl.parent, optimizedMembers)
         }
 
-        // Заменяем программу оптимизированной версией
         program = Program(optimizedClasses)
     }
 
@@ -1005,7 +843,6 @@ class SemanticAnalyzer(private var program: Program) {
     ): MethodBody {
         return when (body) {
             is MethodBody.BlockBody -> {
-                // Оптимизируем statements
                 val optimizedStmts = optimizeStatements(body.stmts, symbolTable, classSymbol, className, methodName)
 
                 val optimizedBody = MethodBody.BlockBody(body.vars, optimizedStmts)
@@ -1026,7 +863,6 @@ class SemanticAnalyzer(private var program: Program) {
         var foundReturn = false
 
         stmts.forEach { stmt ->
-            // Оптимизация 1: Удаление недостижимого кода (после return)
             if (foundReturn) {
                 return@forEach
             }
@@ -1038,12 +874,10 @@ class SemanticAnalyzer(private var program: Program) {
                     Stmt.Return(optimizedExpr)
                 }
                 is Stmt.Assignment -> {
-                    // Оптимизация 2: Упрощение константных выражений
                     val optimizedExpr = simplifyConstantExpression(stmt.expr)
                     Stmt.Assignment(stmt.target, optimizedExpr)
                 }
                 is Stmt.If -> {
-                    // Оптимизируем условие и тела
                     val optimizedCond = simplifyConstantExpression(stmt.cond)
                     Stmt.If(
                         optimizedCond,
@@ -1052,7 +886,6 @@ class SemanticAnalyzer(private var program: Program) {
                     )
                 }
                 is Stmt.While -> {
-                    // Оптимизируем условие и тело цикла
                     val optimizedCond = simplifyConstantExpression(stmt.cond)
                     Stmt.While(
                         optimizedCond,
@@ -1060,7 +893,6 @@ class SemanticAnalyzer(private var program: Program) {
                     )
                 }
                 is Stmt.ExprStmt -> {
-                    // Оптимизируем выражение
                     val optimizedExpr = simplifyConstantExpression(stmt.expr)
                     Stmt.ExprStmt(optimizedExpr)
                 }
@@ -1074,13 +906,6 @@ class SemanticAnalyzer(private var program: Program) {
         return optimizedStmts
     }
 
-    /**
-     * Оптимизация 2: Упрощение константных выражений
-     * Упрощает вызовы методов на константах, например:
-     * - 5.Plus(3) → 8
-     * - 2.Mult(4) → 8
-     * - 5.LessEqual(3) → false
-     */
     private fun simplifyConstantExpression(expr: Expr): Expr {
         return when (expr) {
             is Expr.IntLit,
@@ -1090,11 +915,9 @@ class SemanticAnalyzer(private var program: Program) {
             is Expr.Identifier,
             is Expr.ClassNameExpr -> expr
             is Expr.Call -> {
-                // Упрощаем аргументы
                 val optimizedArgs = expr.args.map { simplifyConstantExpression(it) }
                 val optimizedReceiver = expr.receiver?.let { simplifyConstantExpression(it) }
 
-                // Если receiver и аргументы - константы, пытаемся упростить
                 if (optimizedReceiver != null && optimizedArgs.isNotEmpty()) {
                     val simplified = simplifyConstantMethodCall(optimizedReceiver, expr.method, optimizedArgs)
                     if (simplified != null) {
@@ -1113,29 +936,22 @@ class SemanticAnalyzer(private var program: Program) {
         }
     }
 
-    /**
-     * Упрощение вызова метода на константах
-     * Возвращает упрощенное выражение, если возможно, иначе null
-     */
     private fun simplifyConstantMethodCall(
         receiver: Expr,
         methodName: String,
         args: List<Expr>
     ): Expr? {
         return when {
-            // Операции для Integer
             receiver is Expr.IntLit && args.size == 1 && args[0] is Expr.IntLit -> {
                 val left = receiver.v
                 val right = (args[0] as Expr.IntLit).v
 
                 when (methodName) {
-                    // Арифметические операции
                     "Plus" -> Expr.IntLit(left + right)
                     "Minus" -> Expr.IntLit(left - right)
                     "Mult" -> Expr.IntLit(left * right)
                     "Div" -> if (right != 0L) Expr.IntLit(left / right) else null
                     "Rem" -> if (right != 0L) Expr.IntLit(left % right) else null
-                    // Сравнения
                     "Less" -> Expr.BoolLit(left < right)
                     "LessEqual" -> Expr.BoolLit(left <= right)
                     "Greater" -> Expr.BoolLit(left > right)
@@ -1145,19 +961,16 @@ class SemanticAnalyzer(private var program: Program) {
                     else -> null
                 }
             }
-            // Операции для Real
             receiver is Expr.RealLit && args.size == 1 && args[0] is Expr.RealLit -> {
                 val left = receiver.v
                 val right = (args[0] as Expr.RealLit).v
 
                 when (methodName) {
-                    // Арифметические операции
                     "Plus" -> Expr.RealLit(left + right)
                     "Minus" -> Expr.RealLit(left - right)
                     "Mult" -> Expr.RealLit(left * right)
                     "Div" -> if (right != 0.0) Expr.RealLit(left / right) else null
                     "Rem" -> if (right != 0.0) Expr.RealLit(left % right) else null
-                    // Сравнения
                     "Less" -> Expr.BoolLit(left < right)
                     "LessEqual" -> Expr.BoolLit(left <= right)
                     "Greater" -> Expr.BoolLit(left > right)
@@ -1167,7 +980,6 @@ class SemanticAnalyzer(private var program: Program) {
                     else -> null
                 }
             }
-            // Логические операции для Bool
             receiver is Expr.BoolLit && args.size == 1 && args[0] is Expr.BoolLit -> {
                 val left = receiver.v
                 val right = (args[0] as Expr.BoolLit).v
@@ -1182,17 +994,12 @@ class SemanticAnalyzer(private var program: Program) {
         }
     }
 
-    /**
-     * Оптимизация: Удаление неиспользуемых переменных (Dead Variable Elimination) на уровне метода
-     */
     private fun removeUnusedVariables(body: MethodBody): MethodBody {
         return when (body) {
             is MethodBody.BlockBody -> {
-                // Собираем все используемые переменные
                 val usedVariables = mutableSetOf<String>()
                 collectUsedVariables(body.stmts, usedVariables)
 
-                // Фильтруем переменные: оставляем только используемые
                 val filteredVars = body.vars.filter { varDecl ->
                     usedVariables.contains(varDecl.name)
                 }
@@ -1202,9 +1009,6 @@ class SemanticAnalyzer(private var program: Program) {
         }
     }
 
-    /**
-     * Собрать все используемые переменные в statements
-     */
     private fun collectUsedVariables(stmts: List<Stmt>, usedVariables: MutableSet<String>) {
         stmts.forEach { stmt ->
             when (stmt) {
@@ -1239,9 +1043,6 @@ class SemanticAnalyzer(private var program: Program) {
         }
     }
 
-    /**
-     * Собрать используемые переменные в выражении
-     */
     private fun collectUsedVariablesInExpr(expr: Expr, usedVariables: MutableSet<String>) {
         when (expr) {
             is Expr.Identifier -> {

@@ -37,17 +37,14 @@ fun main() {
         val semanticAnalyzer = SemanticAnalyzer(program)
         semanticAnalyzer.analyze()
         
-        // Выводим таблицы классов (с полями и методами)
         val classTable = semanticAnalyzer.classTable
         classTable.print()
         
-        // Выводим оптимизированный AST
         val optimizedProgram = semanticAnalyzer.getOptimizedProgram()
         AstPrinter.print(optimizedProgram, "Optimized AST")
 
 
         val compiler = Compiler(optimizedProgram, classTable)
-        // run the program(transfer to jasmin files and execute them)
         compiler.compileAndRun()
     } catch (e: SematicException) {
         println("\nSemantic Error: ${e.message}")

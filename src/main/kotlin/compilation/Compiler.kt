@@ -70,7 +70,6 @@ class Compiler(
         
         val process = processBuilder.start()
         
-        // Перенаправляем вывод в консоль
         process.inputStream.bufferedReader().use { reader ->
             reader.lineSequence().forEach { println(it) }
         }

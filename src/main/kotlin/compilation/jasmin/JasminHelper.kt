@@ -5,29 +5,27 @@ import syntaxer.ClassName
 fun toJasminType(type: ClassName): String {
     return when (type) {
         is ClassName.Simple -> when (type.name) {
-            "Integer", "Int" -> "I"      // int
-            "Real", "Double" -> "D"      // double
-            "Bool", "Boolean" -> "Z"     // boolean
-            "void", "Void" -> "V"        // void (для returnType, не для полей)
-            else -> "L${type.name};"     // объектный тип: LProgram; LArray;
+            "Integer", "Int" -> "I"
+            "Real", "Double" -> "D"
+            "Bool", "Boolean" -> "Z"
+            "void", "Void" -> "V"
+            else -> "L${type.name};"
         }
         is ClassName.Generic -> {
             when (type.name) {
                 "Array" -> {
-                    // Array[T] -> массив в JVM
                     val elementType = type.typeArgs.firstOrNull()
                     when (elementType) {
                         is ClassName.Simple -> when (elementType.name) {
-                            "Integer", "Int" -> "[I"      // int[]
-                            "Real", "Double" -> "[D"      // double[]
-                            "Bool", "Boolean" -> "[Z"     // boolean[]
-                            else -> "[Ljava/lang/Object;" // Object[]
+                            "Integer", "Int" -> "[I"
+                            "Real", "Double" -> "[D"
+                            "Bool", "Boolean" -> "[Z"
+                            else -> "[Ljava/lang/Object;"
                         }
-                        else -> "[Ljava/lang/Object;" // для дженериков используем Object[]
+                        else -> "[Ljava/lang/Object;"
                     }
                 }
                 else -> {
-                    // Другие дженерики - используем базовое имя
                     "L${type.name};"
                 }
             }
@@ -57,18 +55,14 @@ fun isBuiltin(type: ClassName): Boolean {
     }
 }
 
-/**
- * Получить размер типа в слотах JVM
- */
 fun getJvmSlotSize(type: ClassName): Int {
     return when (type) {
         is ClassName.Simple -> when (type.name) {
-            "Real", "Double" -> 2  // double занимает 2 слота
-            "Integer", "Int", "Bool", "Boolean" -> 1  // int, boolean - 1 слот
-            else -> 1  // Object types - 1 слот (reference)
+            "Real", "Double" -> 2
+            "Integer", "Int", "Bool", "Boolean" -> 1
+            else -> 1
         }
         is ClassName.Generic -> {
-            // Array - объект, занимает 1 слот
             1
         }
     }

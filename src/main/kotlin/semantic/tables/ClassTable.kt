@@ -7,9 +7,6 @@ import syntaxer.ClassName
 class ClassTable {
     private val classes = mutableMapOf<String, ClassSymbol>()
 
-    /**
-     * Добавить класс в таблицу
-     */
     fun addClass(classSymbol: ClassSymbol) {
         if (classes.containsKey(classSymbol.name)) {
             throw SematicException("Duplicate class definition: ${classSymbol.name}")
@@ -17,44 +14,27 @@ class ClassTable {
         classes[classSymbol.name] = classSymbol
     }
 
-    /**
-     * Найти класс по имени
-     */
     fun findClass(name: String): ClassSymbol? = classes[name]
 
-    /**
-     * Получить класс по типу имени
-     */
     fun getClass(name: ClassName): ClassSymbol? {
         return when (name) {
             is ClassName.Simple -> classes[name.name]
             is ClassName.Generic -> {
-                // Дженерики (Array) - встроенные типы, не находятся в таблице классов
                 null
             }
         }
     }
 
-    /**
-     * Получить все классы
-     */
     fun getAllClasses(): Collection<ClassSymbol> = classes.values
 
-    /**
-     * Проверить, существует ли класс
-     */
     fun contains(name: String): Boolean = classes.containsKey(name)
 
-    /**
-     * Напечатать таблицу классов
-     */
     fun print() {
         println("\n========== Class Table ==========")
         classes.values.forEach { cls ->
             println("Class: ${cls.name}")
             println("  Parent: ${cls.parentClass?.name ?: "none"}")
             
-            // Таблица переменных класса (поля)
             println("  Fields:")
             if (cls.fields.isEmpty()) {
                 println("    (no fields)")
@@ -76,7 +56,6 @@ class ClassTable {
                 }
             }
             
-            // Таблица методов класса
             println("  Methods:")
             if (cls.methods.isEmpty()) {
                 println("    (no methods)")
@@ -114,7 +93,6 @@ class ClassTable {
                         } ?: "void"
                         println("    ${method.name}($paramsStr) : $returnTypeStr")
                         
-                        // Таблица символов метода
                         println("      Symbol Table:")
                         method.symbolTable.print()
                     }

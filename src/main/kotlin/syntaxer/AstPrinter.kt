@@ -56,14 +56,12 @@ object AstPrinter {
     private fun printMethodBody(body: MethodBody, indent: String) {
         when (body) {
             is MethodBody.BlockBody -> {
-                // Локальные переменные
                 body.vars.forEachIndexed { index, varDecl ->
                     val connector = if (index == body.vars.size - 1 && body.stmts.isEmpty()) "└── " else "├── "
                     val varType = varDecl.type
                     println("$indent$connector Local Var: ${varDecl.name} : ${classNameToString(varType)}")
                 }
                 
-                // Statements
                 body.stmts.forEachIndexed { index, stmt ->
                     val isLast = index == body.stmts.size - 1
                     printStmt(stmt, indent, isLast)

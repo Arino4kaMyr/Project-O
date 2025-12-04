@@ -73,7 +73,6 @@ class Lexer {
                             i++
                         }
                         c == '-' && i + 1 < text.length && isDigit(text[i + 1]) -> {
-                            // Отрицательное число: минус, за которым следует цифра
                             token.append(c)
                             token.append(text[i + 1])
                             state = State.NUM

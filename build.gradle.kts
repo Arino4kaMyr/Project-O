@@ -25,7 +25,6 @@ application {
     mainClass.set("MainKt")
 }
 
-// Задача для компиляции .j файлов в .class
 tasks.register("compileJasmin") {
     group = "compilation"
     description = "Compiles generated Jasmin files to Java bytecode"
@@ -57,7 +56,6 @@ tasks.register("compileJasmin") {
     }
 }
 
-// Задача для запуска сгенерированной программы
 tasks.register<JavaExec>("runGenerated") {
     group = "execution"
     description = "Runs the compiled Program class from generated Jasmin files"
@@ -73,12 +71,11 @@ tasks.register<JavaExec>("runGenerated") {
     errorOutput = System.err
 }
 
-// Комплексная задача: компиляция Kotlin → генерация Jasmin → компиляция Jasmin → запуск
 tasks.register("buildAndRun") {
     group = "build"
     description = "Full pipeline: compile Kotlin, generate Jasmin, compile Jasmin, and run program"
     
-    dependsOn("run")  // Это генерирует Jasmin файлы
+    dependsOn("run")
     dependsOn("compileJasmin")
     finalizedBy("runGenerated")
 }

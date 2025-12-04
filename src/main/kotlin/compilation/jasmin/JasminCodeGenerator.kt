@@ -1610,7 +1610,7 @@ class JasminCodeGenerator(
         methodSymbol.params.forEachIndexed { paramIndex, param ->
             if (paramIndex < logicalIndex) {
                 realIndex += getJvmSlotSize(param.type)
-            } else if (paramIndex == logicalIndex && param.name == variableName) {тр
+            } else if (paramIndex == logicalIndex && param.name == variableName) {
                 return realIndex
             }
         }
